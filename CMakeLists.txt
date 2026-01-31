@@ -18,15 +18,15 @@ find_package(ament_cmake REQUIRED)
 
 
 # 1. Install directories: Launch files, URDF models, maps, configs, and worlds.
-# These assets are installed to: install/share/my_robot/
+# These assets are installed to: install/share/mobile_robot/
 install(
   DIRECTORY launch urdf maps config worlds meshes scripts
   DESTINATION share/${PROJECT_NAME}
 )
 
 # 2. Install Python executables/scripts.
-# These are installed to: install/lib/my_robot/
-# Users can invoke them via: ros2 run my_robot <script_name>
+# These are installed to: install/lib/mobile_robot/
+# Users can invoke them via: ros2 run mobile_robot <script_name>
 install(
   PROGRAMS
     scripts/robot_teleop.py
