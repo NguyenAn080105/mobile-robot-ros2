@@ -43,20 +43,29 @@
         <material>Gazebo/Blue</material>
         <mu1>1.0</mu1>
         <mu2>1.0</mu2>
+        <!--kp>10000000.0</kp--> 
+        <kd>1.0</kd>
+        <minDepth>0.005</minDepth> <fdir1>1 0 0</fdir1>
     </gazebo>
 
     <gazebo reference="right_wheel">
         <material>Gazebo/Blue</material>
         <mu1>1.0</mu1>
         <mu2>1.0</mu2>
+        <!--kp>10000000.0</kp--> 
+        <kd>1.0</kd>
+        <minDepth>0.005</minDepth> <fdir1>1 0 0</fdir1>
     </gazebo>
 
     <gazebo reference="caster_wheel">
         <material>Gazebo/Black</material>
-        <mu1>0.001</mu1> <mu2>0.001</mu2>
+        <mu1>0.001</mu1> 
+        <mu2>0.001</mu2>
+        <minDepth>0.005</minDepth> <fdir1>1 0 0</fdir1>
     </gazebo>
 
     <gazebo reference="laser_frame">
+        <material>Gazebo/Black</material>
         <sensor name="lidar" type="ray">
             <pose>0 0 0 0 0 0</pose>
             <always_on>true</always_on>
@@ -71,7 +80,7 @@
                     </horizontal>
                 </scan>
                 <range>
-                    <min>0.12</min> <max>3.5</max>
+                    <min>0.20</min> <max>3.5</max>
                 </range>
             </ray>
             <plugin name="laser_controller" filename="libgazebo_ros_ray_sensor.so">
