@@ -2,12 +2,15 @@
 """
 IMU Data Reader Node for ROS 2 Dashing
 Đọc và xử lý dữ liệu từ IMU sensor
+imu_reader sẽ đọc dữ liệu từ IMU, sau đó dữ liệu này được node ekf_localization sử dụng để kết hợp với Wheel Odometry, 
+giúp robot định vị chính xác hơn khi di chuyển trong môi trường mô phỏng
 """
 
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Imu
 from geometry_msgs.msg import Vector3
+from rclpy.qos import qos_profile_sensor_data
 import math
 
 class IMUReader(Node):
@@ -19,7 +22,7 @@ class IMUReader(Node):
             Imu,
             'imu/data',
             self.imu_callback,
-            10
+            qos_profile_sensor_data
         )
         
         # Publisher cho orientation (góc Euler)
