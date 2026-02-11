@@ -49,9 +49,8 @@
             <material name="white"/>
         </visual>
         <collision>
-            <origin xyz="${chassis_width/3.5} 0 ${chassis_height/2}" rpy="0 0 0"/>
             <geometry>
-                <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+                <mesh filename="package://mobile_robot/meshes/Model.stl" scale="0.01 0.01 0.01"/>
             </geometry>
         </collision>
         <xacro:inertial_box mass="${chassis_mass}" x="${chassis_length}" y="${chassis_width}" z="${chassis_height}">
