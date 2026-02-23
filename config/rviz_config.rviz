@@ -4,6 +4,8 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
+        - /Global Options1
+        - /LaserScan1
         - /LaserScan1/Topic1
       Splitter Ratio: 0.5
     Tree Height: 795
@@ -69,6 +71,11 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
+        imu_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
         laser_frame:
           Alpha: 1
           Show Axes: false
@@ -102,9 +109,15 @@ Visualization Manager:
           Value: true
         chassis:
           Value: true
+        imu_link:
+          Value: true
         laser_frame:
           Value: true
         left_wheel:
+          Value: true
+        map:
+          Value: true
+        odom:
           Value: true
         right_wheel:
           Value: true
@@ -114,17 +127,21 @@ Visualization Manager:
       Show Axes: true
       Show Names: false
       Tree:
-        base_footprint:
-          base_link:
-            chassis:
-              caster_wheel:
-                {}
-              laser_frame:
-                {}
-            left_wheel:
-              {}
-            right_wheel:
-              {}
+        map:
+          odom:
+            base_footprint:
+              base_link:
+                chassis:
+                  caster_wheel:
+                    {}
+                  imu_link:
+                    {}
+                  laser_frame:
+                    {}
+                left_wheel:
+                  {}
+                right_wheel:
+                  {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -137,16 +154,16 @@ Visualization Manager:
       Channel Name: intensity
       Class: rviz_default_plugins/LaserScan
       Color: 255; 255; 255
-      Color Transformer: ""
+      Color Transformer: Intensity
       Decay Time: 0
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 4096
+      Max Intensity: 0
       Min Color: 0; 0; 0
       Min Intensity: 0
       Name: LaserScan
-      Position Transformer: ""
+      Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 3
       Size (m): 0.009999999776482582
@@ -156,14 +173,34 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /scan
+        Value: /scan_filtered
       Use Fixed Frame: true
       Use rainbow: true
+      Value: true
+    - Alpha: 0.699999988079071
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: false
+      Enabled: true
+      Name: Map
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_updates
+      Use Timestamp: false
       Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: base_link
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:
@@ -175,25 +212,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 1.7000000476837158
+      Distance: 5.189833164215088
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0
+        X: 4.9052629470825195
+        Y: -0.6309743523597717
+        Z: 1.678540825843811
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.1400001049041748
+      Pitch: 1.0597968101501465
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 5.214992523193359
+      Yaw: 3.0549886226654053
     Saved:
       - Class: rviz_default_plugins/Orbit
         Distance: 1.7000000476837158

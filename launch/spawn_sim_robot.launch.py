@@ -62,7 +62,7 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # 3.4 Spawn Entity
+    # 3.4 Spawn Entitys
     spawn_entity = Node(
         package='gazebo_ros',
         executable='spawn_entity.py',
@@ -70,8 +70,8 @@ def generate_launch_description():
         output='screen',
         arguments=[
             '-topic', 'robot_description',
-            '-entity', 'my_robot_model',
-            '-x', '0', '-y', '0', '-z', '0.01'
+            '-entity', 'mobile_robot',
+            '-x', '0', '-y', '0', '-z', '0.05'
         ]
     )
 

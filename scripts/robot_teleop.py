@@ -9,12 +9,12 @@ msg = """
 Control Your Robot!
 ---------------------------
 Moving around:
-       w
-   a   s   d
-       x
+       i
+   j   k   l
+       ,
 
-w/s : move forward/backward
-a/d : turn left/right
+i/k : move forward/backward
+j/l : turn left/right
 
 space key, x : force stop
 
@@ -23,11 +23,11 @@ CTRL-C to quit
 
 # Dictionary to map key presses to velocities
 moveBindings = {
-    'w': (1, 0),  # Forward
-    's': (-1, 0), # Backward
-    'a': (0, 1),  # Turn Left
-    'd': (0, -1), # Turn Right
-    'x': (0, 0),  # Stop
+    'i': (1, 0),  # Forward
+    'k': (-1, 0), # Backward
+    'j': (0, 1),  # Turn Left
+    'l': (0, -1), # Turn Right
+    ',': (0, 0),  # Stop
     ' ': (0, 0),  # Stop
 }
 

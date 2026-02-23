@@ -1,0 +1,25 @@
+scan_to_scan_filter_chain:
+  ros__parameters:
+    filter1:
+      name: box_filter
+      type: laser_filters/LaserScanBoxFilter
+      params:
+        box_frame: base_footprint
+        invert: false
+        min_x: -0.15
+        max_x: 0.35
+        min_y: -0.25
+        max_y: 0.25
+        min_z: -0.05
+        max_z: 1.40
+
+    filter2:
+      name: range_filter
+      type: laser_filters/LaserScanRangeFilter
+      params:
+        lower_threshold: 0.15
+        upper_threshold: 30.0
+
+    tf_message_filter_target_frame: base_footprint
+    tf_message_filter_queue_size: 20
+    tf_message_filter_tolerance: 0.15
