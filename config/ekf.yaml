@@ -68,7 +68,7 @@ ekf_filter_node:
     imu0_differential: false
     
     # Relative mode
-    imu0_relative: true      # Đặt true để EKF lấy hướng IMU đầu tiên làm gốc 0
+    imu0_relative: true 
     
     # Queue size
     imu0_queue_size: 10
@@ -82,9 +82,6 @@ ekf_filter_node:
     # ============================================
     # PROCESS NOISE COVARIANCE
     # ============================================
-    # Độ nhiễu của quá trình (càng lớn = tin model ít hơn)
-    # Thứ tự: x, y, z, roll, pitch, yaw, x_dot, y_dot, z_dot, 
-    #         roll_dot, pitch_dot, yaw_dot, x_ddot, y_ddot, z_ddot
     process_noise_covariance: [0.05,  0.0,   0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
                                0.0,   0.05,  0.0,   0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
                                0.0,   0.0,   0.06,  0.0,   0.0,   0.0,   0.0,    0.0,    0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
@@ -104,7 +101,6 @@ ekf_filter_node:
     # ============================================
     # INITIAL STATE COVARIANCE
     # ============================================
-    # Độ không chắc chắn ban đầu của state
     initial_estimate_covariance: [1e-9,  0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
                                   0.0,   1e-9,  0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,
                                   0.0,   0.0,   1e-9,  0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,   0.0,

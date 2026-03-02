@@ -61,10 +61,10 @@ def generate_launch_description():
     scan_filter = Node(
         package='laser_filters',
         executable='scan_to_scan_filter_chain',
-        name='scan_filter',
+        name='scan_to_scan_filter_chain',
         output='screen', 
         parameters=[filter_config, {'use_sim_time': use_sim_time}],
-        arguments=['--ros-args', '--log-level', 'info']
+        # arguments=['--ros-args', '--log-level', 'info']
     )
 
     spawn_entity = Node(
@@ -96,9 +96,9 @@ def generate_launch_description():
     )
 
     delayed_spawn = TimerAction(period=2.0, actions=[spawn_entity])
-    delayed_filter = TimerAction(period=4.0, actions=[scan_filter])
+    delayed_rviz2 = TimerAction(period=2.0, actions=[rviz2])
     delayed_slam = TimerAction(period=3.0, actions=[slam_toolbox])
-    delayed_rviz2 = TimerAction(period=4.0, actions=[rviz2])
+    delayed_filter = TimerAction(period=4.0, actions=[scan_filter])
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),

@@ -48,7 +48,7 @@ class RobotKeyTeleop(Node):
         self.publisher_ = self.create_publisher(Twist, 'cmd_vel', 10)
         
         self.speed = 0.2
-        self.turn = 0.5
+        self.turn = 0.2
         
         self.settings = termios.tcgetattr(sys.stdin)
 

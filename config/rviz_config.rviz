@@ -200,11 +200,12 @@ Visualization Manager:
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: map
+    Fixed Frame: base_footprint
     Frame Rate: 30
   Name: root
   Tools:
     - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/FocusCamera
   Transformation:
     Current:
       Class: rviz_default_plugins/TF
@@ -212,25 +213,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 5.189833164215088
+      Distance: 0.05556211620569229
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 4.9052629470825195
-        Y: -0.6309743523597717
-        Z: 1.678540825843811
+        X: 2.9406890869140625
+        Y: -1.17616868019104
+        Z: 3.230325937271118
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.0597968101501465
+      Pitch: 0.694797158241272
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.0549886226654053
+      Yaw: 5.428161144256592
     Saved:
       - Class: rviz_default_plugins/Orbit
         Distance: 1.7000000476837158

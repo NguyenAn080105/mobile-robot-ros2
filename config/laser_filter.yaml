@@ -17,7 +17,7 @@ scan_to_scan_filter_chain:
       name: range_filter
       type: laser_filters/LaserScanRangeFilter
       params:
-        lower_threshold: 0.15
+        lower_threshold: 0.06
         upper_threshold: 30.0
 
     tf_message_filter_target_frame: base_footprint
