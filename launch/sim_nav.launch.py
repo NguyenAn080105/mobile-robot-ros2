@@ -6,23 +6,24 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.actions import Node
 
+
 def generate_launch_description():
     package_name = 'mobile_robot'
     pkg_share = get_package_share_directory(package_name)
     pkg_gazebo_ros = get_package_share_directory('gazebo_ros')
     pkg_nav2_bringup = get_package_share_directory('nav2_bringup')
 
-    default_model_path = os.path.join(pkg_share, 'urdf', 'mobile_robot.urdf.xacro')
-    default_world_path = os.path.join(pkg_share, 'worlds', 'sim_room.world')
+    default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot.urdf.xacro')
+    default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room.world')
     default_rviz_config = os.path.join(pkg_share, 'config', 'rviz_config.rviz')
-    ekf_config_path = os.path.join(pkg_share, 'config', 'ekf.yaml')
-    filter_config = os.path.join(pkg_share, 'config', 'laser_filter.yaml')
-    nav2_params = os.path.join(pkg_share, 'config', 'nav2_params.yaml')
-    map_file = os.path.join(pkg_share, 'maps', 'sim_map.yaml')
+    ekf_config_path     = os.path.join(pkg_share, 'config', 'ekf.yaml')
+    filter_config       = os.path.join(pkg_share, 'config', 'laser_filter.yaml')
+    nav2_params         = os.path.join(pkg_share, 'config', 'nav2_params.yaml')
+    map_file            = os.path.join(pkg_share, 'maps', 'sim_map.yaml')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
-    urdf_model = LaunchConfiguration('model', default=default_model_path)
-    world = LaunchConfiguration('world', default=default_world_path)
+    urdf_model   = LaunchConfiguration('model', default=default_model_path)
+    world        = LaunchConfiguration('world', default=default_world_path)
 
     # ====================== GAZEBO ======================
     gazebo = IncludeLaunchDescription(
@@ -32,7 +33,7 @@ def generate_launch_description():
         launch_arguments={'world': world}.items()
     )
 
-    # ====================== ROBOT STATE ======================
+    # ====================== ROBOT STATE PUBLISHER ======================
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -44,7 +45,7 @@ def generate_launch_description():
         }]
     )
 
-    # ====================== EKF ======================
+    # ====================== EKF (sensor fusion) ======================
     robot_localization_node = Node(
         package='robot_localization',
         executable='ekf_node',
@@ -54,12 +55,19 @@ def generate_launch_description():
     )
 
     # ====================== LASER FILTER ======================
+    # [FIX] Thêm remappings rõ ràng:
+    #   - subscribe /scan (từ Gazebo LiDAR plugin)
+    #   - publish    /scan_filtered (dùng bởi AMCL, costmap, SLAM)
     scan_filter = Node(
         package='laser_filters',
         executable='scan_to_scan_filter_chain',
         name='scan_to_scan_filter_chain',
         output='screen',
         parameters=[filter_config, {'use_sim_time': use_sim_time}],
+        remappings=[
+            ('scan',          '/scan'),
+            ('scan_filtered', '/scan_filtered'),
+        ]
     )
 
     # ====================== SPAWN ROBOT ======================
@@ -68,20 +76,24 @@ def generate_launch_description():
         executable='spawn_entity.py',
         name='urdf_spawner',
         output='screen',
-        arguments=['-topic', 'robot_description',
-                   '-entity', 'mobile_robot',
-                   '-x', '0', '-y', '0', '-z', '0.05']
+        arguments=[
+            '-topic', 'robot_description',
+            '-entity', 'mobile_robot',
+            '-x', '0', '-y', '0', '-z', '0.05'
+        ]
     )
 
     # ====================== NAV2 BRINGUP ======================
+    # [FIX] Truyền map_file vào bringup — nav2_bringup sẽ override yaml_filename
+    #       trong map_server bằng argument này
     nav2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_nav2_bringup, 'launch', 'bringup_launch.py')
         ),
         launch_arguments={
-            'map': map_file,
+            'map':          map_file,
             'use_sim_time': use_sim_time,
-            'params_file': nav2_params
+            'params_file':  nav2_params,
         }.items()
     )
 
@@ -95,21 +107,25 @@ def generate_launch_description():
         arguments=['-d', default_rviz_config]
     )
 
-    # ====================== DELAYS ======================
-    delayed_spawn = TimerAction(period=2.0, actions=[spawn_entity])
-    delayed_filter = TimerAction(period=3.0, actions=[scan_filter])
-    delayed_nav2 = TimerAction(period=4.0, actions=[nav2])
-    delayed_rviz2 = TimerAction(period=5.0, actions=[rviz2])
+    # ====================== TIMING ======================
+    delayed_spawn  = TimerAction(period=2.0, actions=[spawn_entity])
+    delayed_filter = TimerAction(period=4.5, actions=[scan_filter])
+    delayed_nav2   = TimerAction(period=7.0, actions=[nav2])
+    delayed_rviz2  = TimerAction(period=9.0, actions=[rviz2])
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
-        DeclareLaunchArgument('model', default_value=default_model_path),
-        DeclareLaunchArgument('world', default_value=default_world_path),
+        DeclareLaunchArgument('model',        default_value=default_model_path),
+        DeclareLaunchArgument('world',        default_value=default_world_path),
+
+        # Khởi động ngay
         gazebo,
         robot_state_publisher,
         robot_localization_node,
+
+        # Khởi động theo thứ tự (có delay)
         delayed_spawn,
         delayed_filter,
         delayed_nav2,
-        delayed_rviz2
+        delayed_rviz2,
     ])
