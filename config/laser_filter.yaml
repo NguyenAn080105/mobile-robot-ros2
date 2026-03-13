@@ -6,8 +6,8 @@ scan_to_scan_filter_chain:
       params:
         box_frame: base_footprint
         invert: false
-        min_x: -0.15
-        max_x: 0.35
+        min_x: -0.10
+        max_x: 0.30
         min_y: -0.25
         max_y: 0.25
         min_z: -0.05

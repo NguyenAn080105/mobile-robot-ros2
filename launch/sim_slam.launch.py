@@ -16,7 +16,7 @@ def generate_launch_description():
 
     default_model_path = os.path.join(pkg_share, 'urdf', 'mobile_robot.urdf.xacro')
     default_world_path = os.path.join(pkg_share, 'worlds', 'sim_room.world')
-    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz_config.rviz')
+    default_rviz_config = os.path.join(pkg_share, 'config', 'slam_config.rviz')
     ekf_config_path = os.path.join(pkg_share, 'config', 'ekf.yaml')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
@@ -31,6 +31,7 @@ def generate_launch_description():
         launch_arguments={'world': world}.items()
     )
 
+    # ====================== ROBOT STATE PUBLISHER ======================
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -42,14 +43,7 @@ def generate_launch_description():
         }]
     )
 
-    # joint_state_publisher = Node(
-    #     package='joint_state_publisher',
-    #     executable='joint_state_publisher',
-    #     name='joint_state_publisher',
-    #     output='screen',
-    #     parameters=[{'use_sim_time': use_sim_time}]
-    # )
-
+    # ====================== EKF ======================
     robot_localization_node = Node(
         package='robot_localization',
         executable='ekf_node',
@@ -58,21 +52,30 @@ def generate_launch_description():
         parameters=[ekf_config_path, {'use_sim_time': use_sim_time}]
     )
 
+    # ====================== LASER FILTER ======================
     scan_filter = Node(
         package='laser_filters',
         executable='scan_to_scan_filter_chain',
         name='scan_to_scan_filter_chain',
-        output='screen', 
+        output='screen',
         parameters=[filter_config, {'use_sim_time': use_sim_time}],
-        # arguments=['--ros-args', '--log-level', 'info']
+        remappings=[
+            ('scan',          '/scan'),
+            ('scan_filtered', '/scan_filtered'),
+        ]
     )
 
+    # ====================== SPAWN ROBOT ======================
     spawn_entity = Node(
         package='gazebo_ros',
         executable='spawn_entity.py',
         name='urdf_spawner',
         output='screen',
-        arguments=['-topic', 'robot_description', '-entity', 'mobile_robot', '-x', '0', '-y', '0', '-z', '0.05']
+        arguments=[
+            '-topic', 'robot_description',
+            '-entity', 'mobile_robot',
+            '-x', '0', '-y', '0', '-z', '0.05'
+        ]
     )
 
     slam_toolbox = Node(
@@ -95,10 +98,10 @@ def generate_launch_description():
         arguments=['-d', default_rviz_config]
     )
 
-    delayed_spawn = TimerAction(period=2.0, actions=[spawn_entity])
-    delayed_rviz2 = TimerAction(period=2.0, actions=[rviz2])
-    delayed_slam = TimerAction(period=3.0, actions=[slam_toolbox])
-    delayed_filter = TimerAction(period=4.0, actions=[scan_filter])
+    delayed_spawn = TimerAction(period=1.0, actions=[spawn_entity])
+    delayed_filter = TimerAction(period=2.0, actions=[scan_filter])
+    delayed_rviz2 = TimerAction(period=3.0, actions=[rviz2])
+    delayed_slam = TimerAction(period=4.0, actions=[slam_toolbox])
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
@@ -106,7 +109,6 @@ def generate_launch_description():
         DeclareLaunchArgument('world', default_value=default_world_path),
         gazebo,
         robot_state_publisher,
-        # joint_state_publisher,
         robot_localization_node,
         delayed_spawn,
         delayed_filter,

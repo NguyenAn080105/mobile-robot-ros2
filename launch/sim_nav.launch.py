@@ -15,11 +15,11 @@ def generate_launch_description():
 
     default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot.urdf.xacro')
     default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room.world')
-    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz_config.rviz')
+    default_rviz_config = os.path.join(pkg_share, 'config', 'nav_config.rviz')
     ekf_config_path     = os.path.join(pkg_share, 'config', 'ekf.yaml')
     filter_config       = os.path.join(pkg_share, 'config', 'laser_filter.yaml')
     nav2_params         = os.path.join(pkg_share, 'config', 'nav2_params.yaml')
-    map_file            = os.path.join(pkg_share, 'maps', 'sim_map.yaml')
+    map_file            = os.path.join(pkg_share, 'maps', 'my_map.yaml')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     urdf_model   = LaunchConfiguration('model', default=default_model_path)
@@ -45,7 +45,7 @@ def generate_launch_description():
         }]
     )
 
-    # ====================== EKF (sensor fusion) ======================
+    # ====================== EKF ======================
     robot_localization_node = Node(
         package='robot_localization',
         executable='ekf_node',
@@ -55,9 +55,6 @@ def generate_launch_description():
     )
 
     # ====================== LASER FILTER ======================
-    # [FIX] Thêm remappings rõ ràng:
-    #   - subscribe /scan (từ Gazebo LiDAR plugin)
-    #   - publish    /scan_filtered (dùng bởi AMCL, costmap, SLAM)
     scan_filter = Node(
         package='laser_filters',
         executable='scan_to_scan_filter_chain',
@@ -84,8 +81,6 @@ def generate_launch_description():
     )
 
     # ====================== NAV2 BRINGUP ======================
-    # [FIX] Truyền map_file vào bringup — nav2_bringup sẽ override yaml_filename
-    #       trong map_server bằng argument này
     nav2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_nav2_bringup, 'launch', 'bringup_launch.py')
@@ -108,22 +103,18 @@ def generate_launch_description():
     )
 
     # ====================== TIMING ======================
-    delayed_spawn  = TimerAction(period=2.0, actions=[spawn_entity])
-    delayed_filter = TimerAction(period=4.5, actions=[scan_filter])
-    delayed_nav2   = TimerAction(period=7.0, actions=[nav2])
-    delayed_rviz2  = TimerAction(period=9.0, actions=[rviz2])
+    delayed_spawn  = TimerAction(period=2.0,  actions=[spawn_entity])
+    delayed_filter = TimerAction(period=5.0,  actions=[scan_filter])
+    delayed_nav2   = TimerAction(period=8.0,  actions=[nav2])
+    delayed_rviz2  = TimerAction(period=10.0, actions=[rviz2])
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('model',        default_value=default_model_path),
         DeclareLaunchArgument('world',        default_value=default_world_path),
-
-        # Khởi động ngay
         gazebo,
         robot_state_publisher,
         robot_localization_node,
-
-        # Khởi động theo thứ tự (có delay)
         delayed_spawn,
         delayed_filter,
         delayed_nav2,
