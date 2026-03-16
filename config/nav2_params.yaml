@@ -99,7 +99,6 @@ controller_server:
   ros__parameters:
     use_sim_time: True
     controller_frequency: 20.0
-    ailure_tolerance: 0.3 
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
@@ -112,7 +111,7 @@ controller_server:
       # --- Velocity limits ---
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 0.35
+      max_vel_x: 0.5
       max_vel_y: 0.0
       max_vel_theta: 1.5
       min_speed_xy: 0.0
@@ -128,33 +127,33 @@ controller_server:
       decel_lim_theta: -3.2
 
       # --- Sampling ---
-      vx_samples: 15
+      vx_samples: 20
       vy_samples: 1
-      vtheta_samples: 30
+      vtheta_samples: 20
 
       # --- Trajectory simulation ---
-      sim_time: 1.7
+      sim_time: 1.2
       linear_granularity: 0.05
-      angular_granularity: 0.02
+      angular_granularity: 0.025
       transform_tolerance: 0.2
       trans_stopped_velocity: 0.10
       short_circuit_trajectory_evaluation: True
       stateful: True
 
       # --- Goal tolerance ---
-      xy_goal_tolerance: 0.2
-      yaw_goal_tolerance: 0.3
+      xy_goal_tolerance: 0.25
+      yaw_goal_tolerance: 0.25
 
       # --- Critics ---
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      BaseObstacle.scale: 0.4          # GIẢM từ 0.8 → ít sợ obstacle hơn trong corridor
-      PathAlign.scale: 32.0            # TĂNG từ 16.0 → bám path chặt hơn
-      PathAlign.forward_point_distance: 0.2   # tăng từ 0.1
-      GoalAlign.scale: 8.0             # giảm từ 12.0
-      GoalAlign.forward_point_distance: 0.2
-      PathDist.scale: 64.0             # TĂNG từ 32.0 → ưu tiên bám path hơn là tránh obstacle
-      GoalDist.scale: 20.0             # giảm từ 24.0
-      RotateToGoal.scale: 24.0         # giảm từ 32.0
+      BaseObstacle.scale: 0.8
+      PathAlign.scale: 16.0
+      PathAlign.forward_point_distance: 0.1
+      GoalAlign.scale: 12.0
+      GoalAlign.forward_point_distance: 0.1
+      PathDist.scale: 32.0
+      GoalDist.scale: 24.0
+      RotateToGoal.scale: 32.0
       RotateToGoal.slowing_factor: 5.0
       RotateToGoal.lookahead_time: -1.0
 
@@ -186,13 +185,13 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 4.0
+          raytrace_max_range: 3.0
           raytrace_min_range: 0.0
-          obstacle_max_range: 3.0
+          obstacle_max_range: 2.5
           obstacle_min_range: 0.0
       inflation_layer:
-        cost_scaling_factor: 3.5
-        inflation_radius: 0.22
+        cost_scaling_factor: 2.0
+        inflation_radius: 0.30
       always_send_full_costmap: True
 
 # ==================== GLOBAL COSTMAP ====================
@@ -226,8 +225,8 @@ global_costmap:
           obstacle_max_range: 2.5
           obstacle_min_range: 0.0
       inflation_layer:
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.28
+        cost_scaling_factor: 2.0
+        inflation_radius: 0.35
       always_send_full_costmap: True
   global_costmap_client:
     ros__parameters:
