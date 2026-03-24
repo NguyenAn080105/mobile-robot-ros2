@@ -15,7 +15,7 @@ def generate_launch_description():
 
     default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot.urdf.xacro')
     default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room.world')
-    default_rviz_config = os.path.join(pkg_share, 'config', 'nav_config.rviz')
+    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz_config.rviz')
     ekf_config_path     = os.path.join(pkg_share, 'config', 'ekf.yaml')
     filter_config       = os.path.join(pkg_share, 'config', 'laser_filter.yaml')
     nav2_params         = os.path.join(pkg_share, 'config', 'nav2_params.yaml')
@@ -104,9 +104,9 @@ def generate_launch_description():
 
     # ====================== TIMING ======================
     delayed_spawn  = TimerAction(period=2.0,  actions=[spawn_entity])
-    delayed_filter = TimerAction(period=5.0,  actions=[scan_filter])
+    delayed_filter = TimerAction(period=3.0,  actions=[scan_filter])
     delayed_nav2   = TimerAction(period=8.0,  actions=[nav2])
-    delayed_rviz2  = TimerAction(period=10.0, actions=[rviz2])
+    delayed_rviz2  = TimerAction(period=12.0, actions=[rviz2])
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),

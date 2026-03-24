@@ -31,6 +31,9 @@ install(
   PROGRAMS
     scripts/robot_teleop.py
     scripts/imu_reader.py
+    scripts/get_checkpoint_coords.py
+    scripts/checkpoint_navigator.py
+    scripts/send_checkpoint_command.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
