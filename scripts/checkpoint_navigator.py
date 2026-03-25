@@ -55,7 +55,8 @@ class CheckpointNavigator(Node):
             return
 
         self.state        = State.IDLE
-        self.current_cp   = self.home_id
+        self.current_cp   = -1
+        # self.current_cp   = self.home_id
         self.target_cp    = None
         self.goal_handle  = None
         self.arrival_time = None
@@ -129,28 +130,36 @@ class CheckpointNavigator(Node):
     # ================================================================
     def _on_nav_command(self, msg: Int32):
         cp_id = msg.data
-
+        # 1. Check if the checkpoint ID exists
         if cp_id not in self.checkpoints:
             self.get_logger().error(
                 f"Checkpoint {cp_id} not found. "
                 f"Valid IDs: {list(self.checkpoints.keys())}")
             return
 
+        # 2. Check if the robot is currently moving; if so, REJECT new commands
+        if self.state in [State.NAVIGATING, State.RETURNING_HOME]:
+            self.get_logger().warn(
+                f"Command rejected: Robot is currently navigating to checkpoint {self.target_cp}. "
+                f"Please wait for completion or send a Stop command."
+            )
+            self._pub_status(f"Busy. Ignored goal {cp_id}. Navigating to {self.target_cp}.")
+            return
+
+        # 3. Check for emergency stop state
         if self.state == State.EMERGENCY_STOP:
             self.get_logger().warn(
                 "Emergency stop active. Send False to /robot/emergency_stop first.")
             return
 
-        if self.state == State.NAVIGATING and self.target_cp == cp_id:
-            self.get_logger().info(f"Already navigating to [{cp_id}].")
-            return
-
+        # 4. Check if already at the requested checkpoint
         if self.state in (State.IDLE, State.AT_CHECKPOINT) and self.current_cp == cp_id:
             self.get_logger().info(f"Already at checkpoint [{cp_id}].")
             return
 
-        if self.goal_handle and self.state in (State.NAVIGATING, State.RETURNING_HOME):
-            self.goal_handle.cancel_goal_async()
+        # Goal Preemption: allow interrupting the current navigation with a new goal.
+        # if self.goal_handle and self.state in (State.NAVIGATING, State.RETURNING_HOME):
+        #     self.goal_handle.cancel_goal_async()
 
         self._send_goal(cp_id)
 
@@ -159,6 +168,7 @@ class CheckpointNavigator(Node):
             if self.state != State.EMERGENCY_STOP:
                 self.get_logger().warn("EMERGENCY STOP activated.")
                 self.state = State.EMERGENCY_STOP
+                self.current_cp = -1
                 if self.goal_handle:
                     self.goal_handle.cancel_goal_async()
                 self._pub_status("EMERGENCY STOP")
@@ -217,10 +227,10 @@ class CheckpointNavigator(Node):
             self.current_cp   = self.target_cp
             self.arrival_time = time.time()
             name = self.checkpoints[self.current_cp]["name"]
-            if self.state == State.RETURNING_HOME:
+            if self.state == State.RETURNING_HOME or self.current_cp == self.home_id:
                 self.state = State.IDLE
-                self.get_logger().info("Returned home. State: IDLE.")
-                self._pub_status("At home. IDLE.")
+                self.get_logger().info(f"Arrived at Home [{self.current_cp}] {name}. State: IDLE.")
+                self._pub_status(f"At Home [{self.current_cp}]. IDLE.")
             else:
                 self.state = State.AT_CHECKPOINT
                 self.get_logger().info(
@@ -231,11 +241,13 @@ class CheckpointNavigator(Node):
                     f"Returning home in {self.timeout:.0f}s.")
 
         elif status == GoalStatus.STATUS_CANCELED:
+            self.current_cp = -1
             if self.state != State.EMERGENCY_STOP:
                 self.state = State.IDLE
                 self.get_logger().info("Goal canceled. State: IDLE.")
 
         elif status == GoalStatus.STATUS_ABORTED:
+            self.current_cp = -1
             self.get_logger().error(
                 f"Navigation aborted to checkpoint {self.target_cp}.")
             self.state = State.IDLE
