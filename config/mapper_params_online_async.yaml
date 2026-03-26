@@ -1,7 +1,9 @@
 slam_toolbox:
   ros__parameters:
 
+    # ================================================================
     # Plugin params
+    # ================================================================
     solver_plugin: solver_plugins::CeresSolver
     ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
     ceres_preconditioner: SCHUR_JACOBI
@@ -9,66 +11,98 @@ slam_toolbox:
     ceres_dogleg_type: TRADITIONAL_DOGLEG
     ceres_loss_function: None
 
+    # ================================================================
     # ROS Parameters
+    # ================================================================
     odom_frame: odom
     map_frame: map
     base_frame: base_footprint
     scan_topic: /scan_filtered
-    mode: mapping #localization
+    mode: mapping
 
-    # if you'd like to immediately start continuing a map at a given pose
-    # or at the dock, but they are mutually exclusive, if pose is given
-    # will use pose
-    #map_file_name: test_steve
-    # map_start_pose: [0.0, 0.0, 0.0]
-    #map_start_at_dock: true
+    map_update_interval: 1.0          # was: 5.0
 
-    debug_logging: true
-    throttle_scans: 1
-    transform_publish_period: 0.02 #if 0 never publishes odometry
-    map_update_interval: 5.0
-    resolution: 0.05
-    max_laser_range: 20.0 #for rastering images
-    minimum_time_interval: 0.5
-    transform_timeout: 1.0 #0.2 thoi gian cho toi da de nhan transform tu tf2
-    tf_buffer_duration: 50.0 #30
-    stack_size_to_use: 40000000 #// program needs a larger stack size to serialize large maps
-    enable_interactive_mode: true     # Đặt false khi chạy Robot thật
+    # Xử lý scan mới sau khi robot đi 0.2m (không cần đợi 0.5m)
+    minimum_travel_distance: 0.2      # was: 0.5
 
-    # General Parameters
+    # Xử lý scan mới sau 0.2s (không cần đợi 0.5s)
+    minimum_time_interval: 0.2        # was: 0.5
+
+    # Xử lý mọi scan, không skip
+    throttle_scans: 1                 # giữ nguyên
+
+    # Tốc độ publish TF odom->map
+    transform_publish_period: 0.02    # giữ nguyên — 50Hz
+
+    # ================================================================
+    # CHẤT LƯỢNG MAP
+    # ================================================================
+
+    # Resolution 0.03m = mỗi cell 3cm thay vì 5cm — chi tiết hơn 2.7×
+    # Jetson Xavier 8GB: chạy được tốt
+    # Nếu thấy lag: đổi lại 0.05
+    resolution: 0.03                  # was: 0.05
+
+    # Tầm quét tối đa của LiDAR S2E
+    max_laser_range: 20.0
+
+    # ================================================================
+    # SCAN MATCHING — tăng độ chính xác
+    # ================================================================
     use_scan_matching: true
     use_scan_barycenter: true
-    minimum_travel_distance: 0.5
-    minimum_travel_heading: 0.5
-    scan_buffer_size: 50 #10
-    scan_buffer_maximum_scan_distance: 10.0
-    link_match_minimum_response_fine: 0.1  
-    link_scan_maximum_distance: 1.5
-    loop_search_maximum_distance: 3.0
-    do_loop_closing: true 
-    loop_match_minimum_chain_size: 10           
-    loop_match_maximum_variance_coarse: 3.0  
-    loop_match_minimum_response_coarse: 0.35    
-    loop_match_minimum_response_fine: 0.45
 
-    # Correlation Parameters - Correlation Parameters
+    # Giữ nhiều scan hơn để matching tốt hơn
+    scan_buffer_size: 100             # was: 50
+    scan_buffer_maximum_scan_distance: 12.0   # was: 10.0
+
+    # Khoảng cách tối đa để link 2 scan liên tiếp
+    link_scan_maximum_distance: 2.0   # was: 1.5
+    link_match_minimum_response_fine: 0.1
+
+    # ================================================================
+    # LOOP CLOSURE — phát hiện và đóng vòng tốt hơn
+    # ================================================================
+    do_loop_closing: true
+    loop_search_maximum_distance: 4.0     # was: 3.0 — tìm loop trong bán kính rộng hơn
+    loop_match_minimum_chain_size: 8      # was: 10 — phát hiện loop sớm hơn
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.30  # was: 0.35 — dễ match hơn
+    loop_match_minimum_response_fine: 0.40    # was: 0.45
+
+    # ================================================================
+    # CORRELATION — scan matching mịn hơn
+    # ================================================================
     correlation_search_space_dimension: 0.5
-    correlation_search_space_resolution: 0.01
-    correlation_search_space_smear_deviation: 0.1 
+    correlation_search_space_resolution: 0.005   # was: 0.01 — mịn hơn 2×
+    correlation_search_space_smear_deviation: 0.05  # was: 0.1
 
-    # Correlation Parameters - Loop Closure Parameters
+    # Loop closure correlation
     loop_search_space_dimension: 8.0
     loop_search_space_resolution: 0.05
     loop_search_space_smear_deviation: 0.03
 
-    # Scan Matcher Parameters
-    distance_variance_penalty: 0.5      
-    angle_variance_penalty: 1.0    
-
-    fine_search_angle_offset: 0.00349     
-    coarse_search_angle_offset: 0.349   
-    coarse_angle_resolution: 0.0349        
+    # ================================================================
+    # SCAN MATCHER PENALTIES
+    # ================================================================
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
     minimum_angle_penalty: 0.9
     minimum_distance_penalty: 0.5
     use_response_expansion: true
-    
+
+    # ================================================================
+    # SYSTEM
+    # ================================================================
+    transform_timeout: 1.0
+    tf_buffer_duration: 50.0
+    stack_size_to_use: 40000000
+
+    # Tắt debug logging — giảm I/O overhead đáng kể
+    debug_logging: false              # was: true
+
+    # Tắt interactive mode khi chạy exploration — giảm overhead
+    enable_interactive_mode: false    # was: true

@@ -34,6 +34,8 @@ install(
     scripts/get_checkpoint_coords.py
     scripts/checkpoint_navigator.py
     scripts/send_checkpoint_command.py
+    scripts/frontier_explorer.py
+    scripts/map_saver_service.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
