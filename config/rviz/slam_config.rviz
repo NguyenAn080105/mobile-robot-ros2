@@ -115,8 +115,6 @@ Visualization Manager:
           Value: true
         left_wheel:
           Value: true
-        map:
-          Value: true
         odom:
           Value: true
         right_wheel:
@@ -127,21 +125,20 @@ Visualization Manager:
       Show Axes: true
       Show Names: false
       Tree:
-        map:
-          odom:
-            base_footprint:
-              base_link:
-                chassis:
-                  caster_wheel:
-                    {}
-                  imu_link:
-                    {}
-                  laser_frame:
-                    {}
-                left_wheel:
+        odom:
+          base_footprint:
+            base_link:
+              chassis:
+                caster_wheel:
                   {}
-                right_wheel:
+                imu_link:
                   {}
+                laser_frame:
+                  {}
+              left_wheel:
+                {}
+              right_wheel:
+                {}
       Update Interval: 0
       Value: true
     - Alpha: 1
