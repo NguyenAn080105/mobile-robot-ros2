@@ -106,7 +106,7 @@ class FrontierExplorer(Node):
         )
 
         self.map_sub = self.create_subscription(
-            OccupancyGrid, '/map', self.map_callback, map_qos
+            OccupancyGrid, '/global_costmap/costmap', self.map_callback, map_qos
         )
         self.frontier_pub = self.create_publisher(MarkerArray, '/frontiers', 10)
 
@@ -251,7 +251,7 @@ class FrontierExplorer(Node):
     # =========================================================
     def detect_frontiers(self, map_msg: OccupancyGrid):
         """
-        Frontier = free cell (0) with at least one 4-neighbor unknown (-1).
+        Frontier = free cell (0) with at least one 4-neighbor unknown (255 or -1).
         Returns [(wx, wy, size), ...]
         """
         info = map_msg.info
@@ -260,26 +260,26 @@ class FrontierExplorer(Node):
         res = info.resolution
         ox = info.origin.position.x
         oy = info.origin.position.y
-
         data = np.array(map_msg.data, dtype=np.int16).reshape((height, width))
 
         frontier_cells = []
         for r in range(1, height - 1):
             for c in range(1, width - 1):
-                if data[r, c] != 0:
+                val = data[r, c]
+                if val < 0 or val > 20:
                     continue
+                
                 neighbors = (data[r - 1, c], data[r + 1, c], data[r, c - 1], data[r, c + 1])
                 if -1 in neighbors:
                     frontier_cells.append((r, c))
 
         if not frontier_cells:
+            self.get_logger().warn(f'No frontier cells found! Unique values in costmap: {np.unique(data)}')
             return []
-
         cell_set = set(frontier_cells)
         visited = set()
         clusters = []
 
-        # 4-neighbor clustering on frontier cells
         for seed in frontier_cells:
             if seed in visited:
                 continue
@@ -324,6 +324,8 @@ class FrontierExplorer(Node):
         robot_x, robot_y, _ = robot_pose
         candidates = []
 
+        distance_weight = 5.0
+
         for wx, wy, size in frontiers:
             dist = math.hypot(wx - robot_x, wy - robot_y)
             key = (round(wx, 2), round(wy, 2))
@@ -335,8 +337,7 @@ class FrontierExplorer(Node):
             if dist < self.frontier_min_distance:
                 continue
 
-            # small bonus for larger frontiers, but distance still dominates
-            score = dist - (self.frontier_size_weight * size)
+            score = (distance_weight * dist) - (self.frontier_size_weight * size)
             candidates.append((score, wx, wy, key))
 
         if not candidates:
@@ -359,19 +360,14 @@ class FrontierExplorer(Node):
         dx = fx - rx
         dy = fy - ry
         dist = math.hypot(dx, dy)
+        backoff_dist = 0.6
 
-        if dist < 1e-6:
-            return fx, fy
-
-        offset = min(self.frontier_approach_offset, max(0.0, dist - self.goal_tolerance))
-        if offset <= 0.0:
-            return fx, fy
-
-        ux = dx / dist
-        uy = dy / dist
-
-        gx = fx - ux * offset
-        gy = fy - uy * offset
+        if dist > backoff_dist:
+            gx = fx - (dx / dist) * backoff_dist
+            gy = fy - (dy / dist) * backoff_dist
+        else:
+            gx = rx
+            gy = ry
         return gx, gy
 
     # =========================================================
