@@ -103,28 +103,28 @@ class IMUReader(Node):
         self.euler_publisher.publish(euler_msg)
         
         # In thông tin (có thể comment out nếu không cần)
-        self.get_logger().info(
-            f'\n'
-            f'=== IMU Data ===\n'
-            f'Orientation (Quaternion):\n'
-            f'  x: {msg.orientation.x:.4f}\n'
-            f'  y: {msg.orientation.y:.4f}\n'
-            f'  z: {msg.orientation.z:.4f}\n'
-            f'  w: {msg.orientation.w:.4f}\n'
-            f'Orientation (Euler - degrees):\n'
-            f'  Roll:  {roll_deg:.2f}°\n'
-            f'  Pitch: {pitch_deg:.2f}°\n'
-            f'  Yaw:   {yaw_deg:.2f}°\n'
-            f'Angular Velocity (rad/s):\n'
-            f'  x: {msg.angular_velocity.x:.4f}\n'
-            f'  y: {msg.angular_velocity.y:.4f}\n'
-            f'  z: {msg.angular_velocity.z:.4f}\n'
-            f'Linear Acceleration (m/s²):\n'
-            f'  x: {msg.linear_acceleration.x:.4f}\n'
-            f'  y: {msg.linear_acceleration.y:.4f}\n'
-            f'  z: {msg.linear_acceleration.z:.4f}\n'
-            f'================'
-        )
+        # self.get_logger().info(
+        #     f'\n'
+        #     f'=== IMU Data ===\n'
+        #     f'Orientation (Quaternion):\n'
+        #     f'  x: {msg.orientation.x:.4f}\n'
+        #     f'  y: {msg.orientation.y:.4f}\n'
+        #     f'  z: {msg.orientation.z:.4f}\n'
+        #     f'  w: {msg.orientation.w:.4f}\n'
+        #     f'Orientation (Euler - degrees):\n'
+        #     f'  Roll:  {roll_deg:.2f}°\n'
+        #     f'  Pitch: {pitch_deg:.2f}°\n'
+        #     f'  Yaw:   {yaw_deg:.2f}°\n'
+        #     f'Angular Velocity (rad/s):\n'
+        #     f'  x: {msg.angular_velocity.x:.4f}\n'
+        #     f'  y: {msg.angular_velocity.y:.4f}\n'
+        #     f'  z: {msg.angular_velocity.z:.4f}\n'
+        #     f'Linear Acceleration (m/s²):\n'
+        #     f'  x: {msg.linear_acceleration.x:.4f}\n'
+        #     f'  y: {msg.linear_acceleration.y:.4f}\n'
+        #     f'  z: {msg.linear_acceleration.z:.4f}\n'
+        #     f'================'
+        # )
 
 def main(args=None):
     rclpy.init(args=args)
