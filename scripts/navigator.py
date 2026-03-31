@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-checkpoint_navigator.py
+navigator.py
 ========================
 Background navigation state machine node.
 Does not handle any user input — controlled via ROS topics only.
