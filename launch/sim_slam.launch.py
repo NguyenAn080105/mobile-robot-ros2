@@ -10,8 +10,8 @@ def generate_launch_description():
     package_name = 'mobile_robot'
     pkg_share = get_package_share_directory(package_name)
 
-    default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot.urdf.xacro')
-    default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room.world')
+    default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot_v2.urdf.xacro')
+    default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room_v2.world')
     default_slam_params = os.path.join(pkg_share, 'config', 'mapper_params_online_async.yaml')
     default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'slam_config.rviz')
 
@@ -47,8 +47,13 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz2',
         output='screen',
-        parameters=[{'use_sim_time': use_sim_time}],
-        arguments=['-d', default_rviz_config]
+        parameters=[{
+            'use_sim_time':          use_sim_time,
+            'checkpoint_file':       checkpoint_file,
+            'timeout_at_checkpoint': timeout,
+            'home_checkpoint_id':    0,
+            'goal_tolerance':        0.25,
+        }]
     )
 
     # ====================== TIMING ======================

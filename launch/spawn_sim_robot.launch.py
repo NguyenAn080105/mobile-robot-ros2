@@ -13,9 +13,9 @@ def generate_launch_description():
     pkg_gazebo_ros = get_package_share_directory('gazebo_ros')
 
     # ====================== PATH ======================
-    default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot.urdf.xacro')
-    default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room.world')
-    # default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'rviz_config.rviz')
+    default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot_v2.urdf.xacro')
+    default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room_v2.world')
+    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'rviz_config.rviz')
     ekf_config_path     = os.path.join(pkg_share, 'config', 'ekf.yaml')
     filter_config       = os.path.join(pkg_share, 'config', 'laser_filter.yaml')
 
@@ -72,6 +72,15 @@ def generate_launch_description():
         ],
     )
 
+    # ====================== ULTRASONIC FUSION ======================
+    ultrasonic_fusion = Node(
+        package='mobile_robot',
+        executable='ultrasonic_fusion_node.py',
+        name='ultrasonic_fusion_node',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+
     # ====================== Spawn Entity ====================== 
     spawn_entity = Node(
         package='gazebo_ros',
@@ -86,17 +95,19 @@ def generate_launch_description():
     )
 
     # ====================== RViz2 Visualization ====================== 
-    # rviz2 = Node(
-    #     package='rviz2',
-    #     executable='rviz2',
-    #     name='rviz2',
-    #     output='screen',
-    #     parameters=[{'use_sim_time': use_sim_time}],
-    #     arguments=['-d', default_rviz_config]
-    # )
+    rviz2 = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
+        arguments=['-d', default_rviz_config]
+    )
 
-    # delayed_rviz2  = TimerAction(period=3.0, actions=[rviz2])
+    delayed_rviz2  = TimerAction(period=3.0, actions=[rviz2])
     delayed_filter = TimerAction(period=2.0,  actions=[scan_filter])
+    delayed_ultrasonic_fusion = TimerAction(period=3.0, actions=[ultrasonic_fusion])
+    delayed_spawn_entity = TimerAction(period=1.0, actions=[spawn_entity])
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
@@ -107,7 +118,8 @@ def generate_launch_description():
         gazebo_client,
         robot_state_publisher,
         ekf_node,
-        spawn_entity,
+        delayed_spawn_entity,
         delayed_filter,
-        # delayed_rviz2
+        delayed_ultrasonic_fusion,
+        # delayed_rviz2,
     ])

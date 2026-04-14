@@ -29,7 +29,7 @@ def generate_launch_description():
     pkg_share    = get_package_share_directory(package_name)
 
     # ── RViz2 config ───────────────────────────────────────────────────────────
-    rviz_config = os.path.join(pkg_share, 'config', 'rviz_config.rviz')
+    rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'nav_config.rviz')
 
     rviz_node = Node(
         package='rviz2',

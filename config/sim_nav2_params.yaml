@@ -2,7 +2,7 @@
 amcl:
   ros__parameters:
     use_sim_time: True
-    set_initial_pose: true
+    set_initial_pose: True
     initial_pose_x: 0.0
     initial_pose_y: 0.0
     initial_pose_z: 0.0
@@ -16,7 +16,7 @@ amcl:
     beam_skip_distance: 0.5
     beam_skip_error_threshold: 0.9
     beam_skip_threshold: 0.3
-    do_beamskip: false
+    do_beamskip: True
     global_frame_id: "map"
     lambda_short: 0.1
     laser_likelihood_max_dist: 2.0
@@ -59,7 +59,7 @@ bt_navigator:
     use_sim_time: True
     global_frame: map
     robot_base_frame: base_footprint
-    odom_topic: /odom
+    odom_topic: /odometry/filtered 
     bt_loop_duration: 5
     default_server_timeout: 10
     default_bt_xml_filename: "/opt/ros/foxy/share/nav2_bt_navigator/behavior_trees/navigate_w_replanning_and_recovery.xml"
@@ -108,38 +108,40 @@ controller_server:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: True
 
-      # --- Velocity limits ---
-      min_vel_x: 0.0
-      min_vel_y: 0.0
-      max_vel_x: 0.5
-      max_vel_y: 0.0
-      max_vel_theta: 0.5
-      min_vel_theta: 0.1
-      min_speed_xy: 0.0
-      max_speed_xy: 0.5
-      min_speed_theta: 0.0
+      # ── Giới hạn vận tốc ──────────────────────────────────────────────────
+      # v_max phần cứng = 0.5 m/s; giảm 30 % vì an toàn → 0.346 m/s
+      min_vel_x: 0.0               # [m/s] không điều khiển lùi
+      min_vel_y: 0.0               # [m/s] không dịch ngang (dẫn động vi sai)
+      max_vel_x: 0.346             # [m/s] giới hạn vận tốc tiến
+      max_vel_y: 0.0               # [m/s] không dịch ngang (dẫn động vi sai)
+      max_vel_theta: 1.643         # [rad/s] giới hạn tốc độ góc (≈ giới hạn phần cứng)
+      min_vel_theta: 0.0
+      min_speed_xy: 0.0            # [m/s] tốc độ XY kết hợp tối thiểu
+      max_speed_xy: 0.346          # [m/s] tốc độ XY kết hợp tối đa
 
-      # --- Acceleration limits ---
-      acc_lim_x: 2.0
-      acc_lim_y: 0.0
-      acc_lim_theta: 1.5
-      decel_lim_x: -2.5
+      # ── Giới hạn gia tốc / giảm tốc ──────────────────────────────────────
+      # Dốc tăng tốc nhẹ nhàng để ngăn trượt bánh và giảm nhiễu rung IMU.
+      acc_lim_x: 0.0865            # [m/s²]  từ 0 lên tối đa trong ≈ 4 s
+      acc_lim_y: 0.0               # [m/s²]  dẫn động vi sai
+      acc_lim_theta: 1.0           # [rad/s²]
+
+      decel_lim_x: -0.172          # [m/s²]  dốc phanh (gấp 2× gia tốc để dừng chặt hơn)
       decel_lim_y: 0.0
-      decel_lim_theta: -3.2
+      decel_lim_theta: -0.821      # [rad/s²]
 
-      # --- Sampling ---
-      vx_samples: 30
-      vy_samples: 0
-      vtheta_samples: 30
+      # ── Lấy mẫu quỹ đạo ──────────────────────────────────────────────────
+      vx_samples: 20               # số mẫu vận tốc tuyến tính trong cửa sổ động
+      vy_samples: 0                # không lấy mẫu ngang
+      vtheta_samples: 30           # số mẫu vận tốc góc
 
-      # --- Trajectory simulation ---
-      sim_time: 1.5
-      linear_granularity: 0.05
-      angular_granularity: 0.025
-      transform_tolerance: 0.2
-      trans_stopped_velocity: 0.10
-      short_circuit_trajectory_evaluation: True
-      stateful: True
+      # ── Mô phỏng tiến ───────────────────────────────────────────────────
+      sim_time: 2.5                # [s]   độ dài chân trời rollout
+      linear_granularity: 0.05     # [m]   bước cung tròn để kiểm tra va chạm
+      angular_granularity: 0.025   # [rad] bước góc để kiểm tra va chạm
+      transform_tolerance: 0.3     # [s]   dung sai tuổi tra cứu TF
+      trans_stopped_velocity: 0.02 # [m/s] ngưỡng tốc độ xác định "robot đứng yên"
+      short_circuit_trajectory_evaluation: True # huỷ chấm điểm ngay khi chạm vùng chi phí chết người
+      stateful: True               # giữ lại hướng tốt nhất cuối cùng qua các chu kỳ tick
 
       # --- Goal tolerance ---
       xy_goal_tolerance: 0.25
@@ -174,12 +176,13 @@ local_costmap:
       width: 5
       height: 5
       resolution: 0.05
-      footprint: "[[0.30,0.25],[0.30,-0.25],[-0.10,-0.25],[-0.10,0.25]]"
+      footprint: "[[0.32, 0.30], [0.32, -0.30], [-0.12, -0.30], [-0.12, 0.30]]"
       update_frequency: 20.0
       publish_frequency: 10.0
       obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
-        observation_sources: scan
+        observation_sources: scan ultrasonic
         scan:
           topic: /scan_filtered
           max_obstacle_height: 2.0
@@ -190,9 +193,23 @@ local_costmap:
           raytrace_min_range: 0.0
           obstacle_max_range: 2.5
           obstacle_min_range: 0.0
+
+        ultrasonic:
+          topic: /ultrasonic_scan
+          sensor_frame: base_footprint
+          data_type: LaserScan
+          marking: true
+          clearing: true
+          max_obstacle_height: 0.5
+          min_obstacle_height: 0.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.15
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.10
+          
       inflation_layer:
         cost_scaling_factor: 5.0
-        inflation_radius: 0.55
+        inflation_radius: 0.35
       always_send_full_costmap: True
 
 # ==================== GLOBAL COSTMAP ====================
@@ -201,7 +218,7 @@ global_costmap:
     ros__parameters:
       use_sim_time: True
       global_frame: map
-      footprint: "[[0.30,0.25],[0.30,-0.25],[-0.10,-0.25],[-0.10,0.25]]"
+      footprint: "[[0.32, 0.30], [0.32, -0.30], [-0.12, -0.30], [-0.12, 0.30]]"
       resolution: 0.05
       update_frequency: 8.0
       publish_frequency: 3.0
@@ -227,7 +244,7 @@ global_costmap:
           obstacle_min_range: 0.0
       inflation_layer:
         cost_scaling_factor: 5.0
-        inflation_radius: 0.55
+        inflation_radius: 0.35
       always_send_full_costmap: True
   global_costmap_client:
     ros__parameters:
@@ -283,11 +300,6 @@ recoveries_server:
     max_rotational_vel: 1.0
     min_rotational_vel: 0.4
     rotational_acc_lim: 3.2
-
-# ==================== ROBOT STATE PUBLISHER ====================
-robot_state_publisher:
-  ros__parameters:
-    use_sim_time: True
 
 # ==================== LIFECYCLE MANAGER ====================
 lifecycle_manager:

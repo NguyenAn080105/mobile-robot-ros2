@@ -31,11 +31,12 @@ install(
   PROGRAMS
     scripts/robot_teleop.py
     scripts/imu_reader.py
-    scripts/get_checkpoint_coords.py
-    scripts/checkpoint_navigator.py
-    scripts/send_checkpoint_command.py
+    scripts/navigator.py
+    scripts/navigator_v2.py
+    scripts/checkpoint_cmd.py
     scripts/frontier_explorer.py
     scripts/map_saver_service.py
+    scripts/ultrasonic_fusion_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

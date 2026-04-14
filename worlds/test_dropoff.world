@@ -1,0 +1,388 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <world name="test_dropoff">
+
+    <!-- ══ PHYSICS ══════════════════════════════════════════════════ -->
+    <physics type="ode">
+      <real_time_update_rate>1000.0</real_time_update_rate>
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+
+    <!-- ══ LIGHTING ══════════════════════════════════════════════════ -->
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- ══ 1. SÀN CHÍNH ══════════════════════════════════════════════ -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode><mu>1.0</mu><mu2>1.0</mu2></ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.5 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══ 2. TƯỜNG BAO ══════════════════════════════════════════════ -->
+    <model name="wall_north">
+      <static>true</static>
+      <pose>3 6 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>14 0.1 1.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>14 0.1 1.0</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_south">
+      <static>true</static>
+      <pose>3 -6 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>14 0.1 1.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>14 0.1 1.0</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_west">
+      <static>true</static>
+      <pose>-1 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.1 12 1.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.1 12 1.0</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_east">
+      <static>true</static>
+      <pose>7 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.1 12 1.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.1 12 1.0</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══ 3. BẬC THỀM 3 CẤP (màu cam nâu) ══════════════════════════
+         x=3~4.2, y=-1~1
+         Bậc 1: cao 0.05m — robot có thể qua (< wheel_radius 0.082m)
+         Bậc 2: cao 0.10m — robot bị chặn
+         Bậc 3: cao 0.15m — us_bot phải phát hiện trước
+    ═════════════════════════════════════════════════════════════════ -->
+    <model name="stair_1">
+      <static>true</static>
+      <pose>3.2 0 0.025 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.40 2.0 0.05</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.40 2.0 0.05</size></box></geometry>
+          <material>
+            <ambient>0.8 0.6 0.3 1</ambient>
+            <diffuse>0.8 0.6 0.3 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="stair_2">
+      <static>true</static>
+      <pose>3.6 0 0.05 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.40 2.0 0.10</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.40 2.0 0.10</size></box></geometry>
+          <material>
+            <ambient>0.7 0.5 0.2 1</ambient>
+            <diffuse>0.7 0.5 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="stair_3">
+      <static>true</static>
+      <pose>4.0 0 0.075 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.40 2.0 0.15</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.40 2.0 0.15</size></box></geometry>
+          <material>
+            <ambient>0.6 0.4 0.1 1</ambient>
+            <diffuse>0.6 0.4 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══ 4. SÀN NÂNG 0.15m + DROP-OFF EDGE (màu xanh lá) ══════════
+         Sàn nâng: x=4.2~5.0, y=-1~1, cao 0.15m
+         Cạnh drop tại x=5.0 → robot rớt xuống sàn chính 0.15m
+         Đây là khu test chính cho us_bot
+         us_bot ở z=0.11m + 0.082m(wheel) = 0.192m từ mặt đất
+         Khi đứng trên sàn nâng 0.15m → sensor ở 0.192+0.15 = 0.342m
+         Ray chúc 15° → distance = 0.342/sin(15°) ≈ 1.32m (không có sàn)
+         → safety_stop = true
+    ═════════════════════════════════════════════════════════════════ -->
+    <model name="raised_floor">
+      <static>true</static>
+      <pose>4.6 0 -0.075 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.8 2.0 0.15</size></box></geometry>
+          <surface>
+            <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.8 2.0 0.15</size></box></geometry>
+          <material>
+            <ambient>0.2 0.7 0.2 1</ambient>
+            <diffuse>0.2 0.7 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Vạch vàng đánh dấu mép drop-off -->
+    <model name="dropoff_marker">
+      <static>true</static>
+      <pose>5.01 0 0.077 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.02 2.0 0.004</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.02 2.0 0.004</size></box></geometry>
+          <material>
+            <ambient>1.0 0.9 0.0 1</ambient>
+            <diffuse>1.0 0.9 0.0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══ 5. PLATFORM CAO 0.20m (màu xanh dương) ════════════════════
+         x=0~2, y=2.5~5.5
+         Robot không thể leo lên (0.20m > wheel_radius 0.082m)
+         us_top (chúc 25° từ 0.572m) detect cạnh từ ~1m xa
+    ═════════════════════════════════════════════════════════════════ -->
+    <model name="platform_high">
+      <static>true</static>
+      <pose>1.0 4.0 -0.10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>2.0 3.0 0.20</size></box></geometry>
+          <surface>
+            <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>2.0 3.0 0.20</size></box></geometry>
+          <material>
+            <ambient>0.2 0.4 0.8 1</ambient>
+            <diffuse>0.2 0.4 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══ 6. PLATFORM THẤP 0.10m (màu đỏ cam) ══════════════════════
+         x=0~2, y=-5.5~-2.5
+         us_bot detect mép platform khi tiếp cận
+    ═════════════════════════════════════════════════════════════════ -->
+    <model name="platform_low">
+      <static>true</static>
+      <pose>1.0 -4.0 -0.15 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>2.0 3.0 0.10</size></box></geometry>
+          <surface>
+            <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>2.0 3.0 0.10</size></box></geometry>
+          <material>
+            <ambient>0.8 0.3 0.2 1</ambient>
+            <diffuse>0.8 0.3 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══ 7. DỐC NGHIÊNG 10° (màu tím) ══════════════════════════════
+         x=3~5, y=-5.5~-2.5
+         Pitch = 0.1745 rad = 10°
+         us_bot đọc thay đổi liên tục khi qua dốc
+    ═════════════════════════════════════════════════════════════════ -->
+    <model name="ramp">
+      <static>true</static>
+      <pose>4.0 -4.0 -0.15 0 0.1745 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>2.0 3.0 0.05</size></box></geometry>
+          <surface>
+            <friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>2.0 3.0 0.05</size></box></geometry>
+          <material>
+            <ambient>0.5 0.3 0.7 1</ambient>
+            <diffuse>0.5 0.3 0.7 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══ 8. GẦM BÀN — Overhang (màu nâu gỗ) ════════════════════════
+         Mặt bàn ở z=0.40m — LiDAR KHÔNG detect được
+         Chỉ us_mid (ngóc 15°) mới thấy được
+         Chân bàn: x=2.0, y=±0.4, cao 0.40m
+    ═════════════════════════════════════════════════════════════════ -->
+    <model name="table_leg_left">
+      <static>true</static>
+      <pose>2.0 0.4 0.20 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.05 0.05 0.40</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.05 0.05 0.40</size></box></geometry>
+          <material>
+            <ambient>0.4 0.2 0.1 1</ambient>
+            <diffuse>0.4 0.2 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="table_leg_right">
+      <static>true</static>
+      <pose>2.0 -0.4 0.20 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.05 0.05 0.40</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.05 0.05 0.40</size></box></geometry>
+          <material>
+            <ambient>0.4 0.2 0.1 1</ambient>
+            <diffuse>0.4 0.2 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="table_top">
+      <static>true</static>
+      <pose>2.0 0 0.425 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.60 0.90 0.05</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.60 0.90 0.05</size></box></geometry>
+          <material>
+            <ambient>0.55 0.27 0.07 1</ambient>
+            <diffuse>0.55 0.27 0.07 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══ 9. VẬT CẢN THẤP 0.12m (màu đỏ tươi) ══════════════════════
+         x=1.5, y=-1.5
+         LiDAR có thể miss nếu laser_frame quá cao
+         us_bot detect từ phía trước
+    ═════════════════════════════════════════════════════════════════ -->
+    <model name="low_obstacle">
+      <static>true</static>
+      <pose>1.5 -1.5 0.06 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.30 0.30 0.12</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.30 0.30 0.12</size></box></geometry>
+          <material>
+            <ambient>1.0 0.2 0.2 1</ambient>
+            <diffuse>1.0 0.2 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══ 10. MARKER ĐIỂM XUẤT PHÁT (xanh lá mờ) ═══════════════════
+         Robot spawn tại x=0.5, y=0
+    ═════════════════════════════════════════════════════════════════ -->
+    <model name="start_marker">
+      <static>true</static>
+      <pose>0.5 0 0.001 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.50 0.50 0.001</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.50 0.50 0.002</size></box></geometry>
+          <material>
+            <ambient>0.0 1.0 0.0 0.4</ambient>
+            <diffuse>0.0 1.0 0.0 0.4</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

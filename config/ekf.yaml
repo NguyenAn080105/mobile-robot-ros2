@@ -54,7 +54,7 @@ ekf_filter_node:
     odom0_relative: false
     
     # Queue size: Kích thước hàng đợi của topic /odom.
-    odom0_queue_size: 5
+    odom0_queue_size: 10
     
     # Ngưỡng loại bỏ dữ liệu rác (outliers) bằng khoảng cách Mahalanobis. 
     # Nếu /odom gửi một vận tốc phi lý (ví dụ do nhiễu UART từ ESP32 sang Jetson), EKF sẽ bỏ qua.
@@ -79,7 +79,7 @@ ekf_filter_node:
     imu0_relative: true 
     
     # Queue size: Kích thước hàng đợi của topic /imu/data
-    imu0_queue_size: 2
+    imu0_queue_size: 5
     
     # BNO055 đã tự loại bỏ trọng lực nếu bạn đọc data từ thanh ghi Linear Acceleration. 
     # Nếu đọc từ thanh ghi Acceleration thông thường thì bật cái này lên = true để ROS tự trừ đi 9.81m/s^2 ở trục Z.
