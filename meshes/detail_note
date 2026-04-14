@@ -1,4 +1,3 @@
-Tôi vừa gửi cho bạn 1 file urdf của robot cũ, hiện tại tôi muốn viết lại cho phiên bản mới chỉ có 2 bánh drive và 1 caster wheel với thông số chi tiết như sao (tính trên bounding của mỗi chi tiết):
 - Model.stl (phần khung tổng thể của robot):
 + Size[mm]: x = 38.000, y = 38.000, z = 128.577
 + Pos. [px]: 0.000 0.000 0.000
@@ -6,6 +5,24 @@ Tôi vừa gửi cho bạn 1 file urdf của robot cũ, hiện tại tôi muốn
 + Volume: 7,839.308 [mm3]
 + Area: 59,834.773 [mm2]
 + Triangles: 98384
++ Unit in mm
+
+- Model_v2.stl (phần khung tổng thể của robot):
++ Size[mm]: x = 48.400, y = 48.200, z = 136.2189
++ Pos. [px]: 0.000 0.000 0.000
++ Rot. [°]:  0.000 0.000 0.000
++ Volume: 21,453,268.001 [mm3]
++ Area: 8,021,474.007 [mm2]
++ Triangles: 409923	
++ Unit in mm
+
+- RPLiDAR_s2stl
++ Size[mm]: x = 7.7, y = 7.7, z = 3.8851
++ Pos. [px]: 0.000 0.000 0.000
++ Rot. [°]:  0.000 0.000 0.000
++ Volume: 7155.200 [mm3]
++ Area: 732.907 [mm2]
++ Triangles: 2824
 + Unit in mm
 
 - caster_wheel.stl

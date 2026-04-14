@@ -47,13 +47,8 @@ def generate_launch_description():
         executable='rviz2',
         name='rviz2',
         output='screen',
-        parameters=[{
-            'use_sim_time':          use_sim_time,
-            'checkpoint_file':       checkpoint_file,
-            'timeout_at_checkpoint': timeout,
-            'home_checkpoint_id':    0,
-            'goal_tolerance':        0.25,
-        }]
+        parameters=[{'use_sim_time': use_sim_time}],
+        arguments=['-d', default_rviz_config]
     )
 
     # ====================== TIMING ======================
