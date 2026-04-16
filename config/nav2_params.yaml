@@ -207,62 +207,96 @@ bt_navigator_rclcpp_node:
 
 controller_server:
   ros__parameters:
-    use_sim_time: True
-    controller_frequency: 20.0
-    min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.5
-    min_theta_velocity_threshold: 0.001
-    progress_checker_plugins: ["progress_checker"] # progress_checker_plugin: "progress_checker" For Humble and older
-    goal_checker_plugins: ["goal_checker"]
-    controller_plugins: ["FollowPath"]
+    # ── Thông số hệ thống cơ bản ───────────────────────────────────────
+    use_sim_time: True                            # [bool]  Sử dụng thời gian mô phỏng (Gazebo)
+    controller_frequency: 20.0                    # [Hz]    Tần số vòng lặp điều khiển (20Hz = 50ms xuất lệnh vận tốc 1 lần)
+    
+    # ── Ngưỡng dừng (Zero-Velocity Thresholds) ─────────────────────────
+    # Dưới các mức này, controller sẽ coi như robot đang đứng yên (hữu ích để tránh rung lắc motor)
+    min_x_velocity_threshold: 0.001               # [m/s]   Ngưỡng vận tốc tối thiểu trục X 
+    min_y_velocity_threshold: 0.5                 # [m/s]   Ngưỡng vận tốc tối thiểu trục Y (Diff-drive không đi ngang nên set cao để bỏ qua)
+    min_theta_velocity_threshold: 0.001           # [rad/s] Ngưỡng vận tốc xoay tối thiểu 
+    
+    # ── Plugins ────────────────────────────────────────────────────────
+    progress_checker_plugins: ["progress_checker"] # [list]  Tên plugin kiểm tra tiến độ di chuyển
+    goal_checker_plugins: ["goal_checker"]         # [list]  Tên plugin kiểm tra xem đã tới đích chưa
+    controller_plugins: ["FollowPath"]             # [list]  Tên plugin điều khiển (Local Planner)
 
+    # ── Cấu hình Progress Checker ──────────────────────────────────────
+    # Chống kẹt: Nếu robot không đi được quãng đường X trong thời gian Y, sẽ báo lỗi để kích hoạt Recovery
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.5
-      movement_time_allowance: 10.0
+      required_movement_radius: 0.5               # [m]     Bán kính tối thiểu bắt buộc robot phải đi qua...
+      movement_time_allowance: 10.0               # [s]     ...trong khoảng thời gian tối đa này. Nếu không sẽ báo kẹt.
+
+    # ── Cấu hình Goal Checker ──────────────────────────────────────────
+    # Điều kiện để Nav2 xác nhận robot đã "Đến Đích" (Goal Reached)
     goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.25
-      stateful: True
+      xy_goal_tolerance: 0.25                     # [m]     Sai số vị trí (bán kính) chấp nhận được khi tới đích
+      yaw_goal_tolerance: 0.25                    # [rad]   Sai số góc hướng (~14.3 độ) chấp nhận được khi tới đích
+      stateful: True                              # [bool]  Lưu trạng thái (hỗ trợ việc đến đúng vị trí X-Y trước rồi mới xoay tại chỗ cho đúng góc Yaw)
 
+    # ── Cấu hình Regulated Pure Pursuit (RPP) ──────────────────────────
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.5
-      max_linear_vel: 0.5
-      min_linear_vel: -0.5
-      max_angular_vel: 2.5
-      min_angular_vel: -2.5
-      max_linear_accel: 2.5
-      max_linear_decel: -2.5
-      max_angular_accel: 3.2                      # Gia tốc góc, giúp robot không bị giật cục khi xoay
-      max_angular_decel: -3.2
-      lookahead_dist: 0.6
-      min_lookahead_dist: 0.3
-      max_lookahead_dist: 0.9
-      lookahead_time: 1.5
-      rotate_to_heading_angular_vel: 1.8          # Vận tốc xoay tại chỗ
-      # transform_tolerance: 0.1
-      use_velocity_scaled_lookahead_dist: false
-      min_approach_linear_velocity: 0.05
-      approach_velocity_scaling_dist: 0.6
-      use_collision_detection: true
-      max_allowed_time_to_collision_up_to_carrot: 1.0
-      use_regulated_linear_velocity_scaling: true
-      use_fixed_curvature_lookahead: false
-      curvature_lookahead_dist: 0.25
-      use_cost_regulated_linear_velocity_scaling: false
-      cost_scaling_dist: 0.3
-      cost_scaling_gain: 1.0
-      regulated_linear_scaling_min_radius: 0.9
-      regulated_linear_scaling_min_speed: 0.25
-      use_rotate_to_heading: true                 # BẬT tính năng xoay tại chỗ trước khi tiến
-      allow_reversing: false
-      rotate_to_heading_min_angle: 0.785          # ~45 độ. Nếu góc lệch của path > 45 độ, robot sẽ xoay tại chỗ trước
-      min_distance_to_obstacle: 0.0
-      stateful: true
-      use_dynamic_window: false
-      allow_obstacle_checking_beyond_goal: false
+      
+      # ── Vận tốc (Velocities) ─────────────────────────────────────────
+      desired_linear_vel: 0.5                     # [m/s]   Vận tốc tiến mong muốn (tốc độ hành trình khi đường thẳng)
+      max_linear_vel: 0.5                         # [m/s]   Vận tốc tiến tối đa tuyệt đối
+      min_linear_vel: 0.0                         # [m/s]   Vận tốc lùi tối đa (âm là lùi)
+      max_angular_vel: 2.5                        # [rad/s] Vận tốc xoay tối đa khi di chuyển
+      min_angular_vel: -2.5                       # [rad/s] Vận tốc xoay tối đa (chiều ngược lại)
+      
+      # ── Gia tốc (Accelerations) ──────────────────────────────────────
+      # Lưu ý: Robot 30kg có quán tính lớn, nên set decel thấp hơn accel để có quãng đường phanh dài hơn
+      max_linear_accel: 2.5                       # [m/s²]  Gia tốc tiến tối đa (tăng tốc độ bốc)
+      max_linear_decel: -0.8                      # [m/s²]
+      max_angular_accel: 3.2                      # [rad/s²] Gia tốc góc, giúp robot không bị giật cục khi bắt đầu xoay
+      max_angular_decel: -3.2                     # [rad/s²] Gia tốc hãm góc (phanh xoay)
+      
+      # ── Thuật toán Bám đường (Lookahead) ─────────────────────────────
+      # Tìm một "điểm ảo" (carrot) phía trước trên quỹ đạo để robot hướng đầu bám theo
+      lookahead_dist: 2.0                         # [m]     Khoảng cách nhìn trước cố định (nếu tắt velocity_scaled)
+      min_lookahead_dist: 0.9                     # [m]     Khoảng cách nhìn trước tối thiểu (khi đi rất chậm)
+      max_lookahead_dist: 2.0                     # [m]     Khoảng cách nhìn trước tối đa (khi đi nhanh)
+      lookahead_time: 1.5                         # [s]     Thời gian dự phóng (Lookahead_dist = Vận_tốc_hiện_tại * lookahead_time)
+      use_velocity_scaled_lookahead_dist: false   # [bool]  Nội suy khoảng cách nhìn trước dựa theo vận tốc đang chạy
+      
+      # ── Giảm tốc khi vào cua (Curvature Scaling) ─────────────────────
+      # Giúp robot tự động rà phanh khi gặp khúc cua gắt để tránh văng do ly tâm
+      use_regulated_linear_velocity_scaling: true # [bool]  BẬT tính năng hãm phanh khi vào khúc cua
+      use_fixed_curvature_lookahead: false        # [bool]  Dùng khoảng cách cố định để tính độ cong của đường
+      curvature_lookahead_dist: 0.25              # [m]     Khoảng cách để tính độ cong (nếu bật cờ trên)
+      regulated_linear_scaling_min_radius: 0.9    # [m]     Bán kính cong tối thiểu của đường để kích hoạt hãm phanh
+      regulated_linear_scaling_min_speed: 0.25    # [m/s]   Vận tốc thấp nhất mà robot duy trì khi đang qua khúc cua
+      
+      # ── Giảm tốc khi gần vật cản (Cost Scaling) ──────────────────────
+      use_cost_regulated_linear_velocity_scaling: false # [bool] BẬT tự động hãm phanh khi đi sát tường/vật cản
+      cost_scaling_dist: 0.3                      # [m]     Khoảng cách từ vật cản bắt đầu tính toán hãm tốc
+      cost_scaling_gain: 1.0                      # [float] Hệ số nhân (càng lớn giảm tốc càng mạnh)
+      
+      # ── Tiếp cận đích (Approach) ─────────────────────────────────────
+      approach_velocity_scaling_dist: 0.6         # [m]     Khoảng cách bắt đầu rà phanh khi chuẩn bị tới điểm đích
+      min_approach_linear_velocity: 0.05          # [m/s]   Vận tốc trườn từ từ tối thiểu khi bò sát vào điểm đích
+      
+      # ── Tránh va chạm động (Collision Detection) ─────────────────────
+      use_collision_detection: true               # [bool]  BẬT tự động kiểm tra mô phỏng va chạm trên đường đi
+      max_allowed_time_to_collision_up_to_carrot: 1.0 # [s] Thời gian tối đa được phép đi tiếp trước khi tông vật cản (dưới mức này robot sẽ dừng)
+      allow_obstacle_checking_beyond_goal: false  # [bool]  Quét vật cản ở phía sau cả điểm đích (Tắt đi để robot dễ vào đích nếu đích sát tường)
+      min_distance_to_obstacle: 0.0               # [m]     Khoảng cách đệm bù trừ thêm cho footprint khi tính va chạm
+
+      # ── Cơ chế xoay tại chỗ (Rotate to Heading) ──────────────────────
+      # Giải quyết lỗi đi vòng cung lớn: Bắt robot xoay đầu chuẩn góc rồi mới được vặn ga tiến
+      use_rotate_to_heading: true                 # [bool]  BẬT tính năng xoay tại chỗ trước khi tiến
+      rotate_to_heading_min_angle: 0.785          # [rad]   ~45 độ. Nếu góc lệch của path > 45 độ, robot sẽ xoay tại chỗ trước
+      rotate_to_heading_angular_vel: 1.0          # [rad/s] Vận tốc xoay tại chỗ (không dùng max_angular_vel lúc đang tiến)
+      transform_tolerance: 0.2                    # [s]     Dung sai tuổi tra cứu TF khi xoay tại chỗ (nên thấp hơn khi di chuyển để phản hồi nhanh hơn)
+      
+      # ── Các thông số trạng thái & động học khác ──────────────────────
+      allow_reversing: false                      # [bool]  Cho phép robot đi lùi nguyên cả đoạn đường thẳng (Diff drive nên TẮT)
+      stateful: true                              # [bool]  Giữ lại trạng thái tính toán từ chu kỳ trước (cần thiết cho RPP hoạt động ổn định)
+      use_dynamic_window: false                   # [bool]  Kiểm tra giới hạn động học (DWA window). Thường tắt ở RPP để đi mượt hơn
 
 controller_server_rclcpp_node:
   ros__parameters:
@@ -283,7 +317,7 @@ local_costmap:
       resolution: 0.05               # [m/ô lưới]
       footprint_padding: 0.01
       # Đa giác footprint của robot trong frame base_footprint [trước→sau, trái→phải].
-      footprint: "[[0.35, 0.32], [0.35, -0.32], [-0.14, -0.32], [-0.14, 0.32]]"
+      footprint: "[[0.355, 0.30], [0.355, -0.30], [-0.14, -0.30], [-0.14, 0.30]]"
       robot_base_frame: base_footprint
       update_frequency: 20.0         # [Hz] phải khớp với controller_frequency
       publish_frequency: 5.0         # [Hz] tần suất cập nhật RViz
@@ -293,6 +327,7 @@ local_costmap:
         observation_sources: scan ultrasonic
         scan:
           topic: /scan_filtered
+          sensor_frame: laser_frame
           max_obstacle_height: 2.0
           clearing: True
           marking: True
@@ -308,15 +343,16 @@ local_costmap:
           data_type: LaserScan
           marking: True
           clearing: True
-          max_obstacle_height: 2.0
+          max_obstacle_height: 0.5
           min_obstacle_height: 0.0
-          obstacle_max_range: 2.0
-          obstacle_min_range: 0.0
-          raytrace_max_range: 2.0
-          raytrace_min_range: 0.02
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.02
+          raytrace_max_range: 4.0
+          raytrace_min_range: 0.0
           inf_is_valid: false
 
       inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 2.2     # tốc độ suy giảm mũ của chi phí theo khoảng cách từ vật cản
         inflation_radius: 0.37        # [m]  bán kính phồng nề quanh vật cản
 
@@ -329,7 +365,7 @@ global_costmap:
     ros__parameters:
       use_sim_time: True
       global_frame: map              # neo vào frame bản đồ tĩnh
-      footprint: "[[0.35, 0.32], [0.35, -0.32], [-0.14, -0.32], [-0.14, 0.32]]"
+      footprint: "[[0.355, 0.30], [0.355, -0.30], [-0.14, -0.30], [-0.14, 0.30]]"
       resolution: 0.05               # [m/ô lưới]
       footprint_padding: 0.01
       robot_base_frame: base_footprint
@@ -343,13 +379,16 @@ global_costmap:
         - "nav2_costmap_2d::InflationLayer"
 
       static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True  # dùng QoS latched/transient-local cho topic /map
 
       obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
         observation_sources: scan
         scan:
           topic: /scan_filtered
+          sensor_frame: laser_frame
           max_obstacle_height: 2.0
           clearing: True
           marking: True
@@ -360,6 +399,7 @@ global_costmap:
           obstacle_min_range: 0.0
 
       inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.5
         inflation_radius: 0.37       # [m]
 
