@@ -1,62 +1,174 @@
 checkpoints:
-- display_name: Home
-  id: 0
-  name: home
-  orientation:
-    w: 0.7057
-    x: 0.0
-    y: 0.0
-    z: 0.7085
-  position:
-    x: -3.988
-    y: -1.9888
-    z: 0.0
-- display_name: Library
-  id: 1
-  name: library
-  orientation:
-    w: 0.7046
-    x: 0.0
-    y: 0.0
-    z: -0.7096
-  position:
-    x: 4.0156
-    y: 1.9984
-    z: 0.0
-- display_name: Meeting Room
-  id: 2
-  name: meeting_room
-  orientation:
-    w: 1.0
-    x: 0.0
-    y: 0.0
-    z: -0.0084
-  position:
-    x: 12.0041
-    y: -0.6082
-    z: 0.0
-- display_name: Principal's Office
-  id: 3
-  name: principal_office
-  orientation:
-    w: 0.9994
-    x: 0.0
-    y: 0.0
-    z: -0.0352
-  position:
-    x: 12.0183
-    y: -0.6857
-    z: 0.0
-- display_name: Student Affairs
-  id: 4
-  name: student_affairs
-  orientation:
-    w: 0.7025
-    x: 0.0
-    y: 0.0
-    z: -0.7117
-  position:
-    x: 5.9559
-    y: 1.8607
-    z: 0.0
+  - display_name: B0
+    id: 0
+    name: b0
+    orientation:
+      w: 0.999999
+      x: 0.0
+      y: 0.0
+      z: 0.00172636
+    position:
+      x: -0.00453427
+      y: 0.000528812
+      z: 0.0
+  - display_name: B1
+    id: 1
+    name: b1
+    orientation:
+      w: 0.704849
+      x: 0.0
+      y: 0.0
+      z: 0.709358
+    position:
+      x: -2.58392
+      y: 1.81809
+      z: 0.0
+  - display_name: B2
+    id: 2
+    name: b2
+    orientation:
+      w: 0.914391
+      x: 0.0
+      y: 0.0
+      z: -0.404832
+    position:
+      x: 4.44479
+      y: -1.59493
+      z: 0.0
+  - display_name: A0
+    id: 3
+    name: a0
+    orientation:
+      w: 0.335444
+      x: 0.0
+      y: 0.0
+      z: -0.94206
+    position:
+      x: 10.2495
+      y: -1.57992
+      z: 0.0
+  - display_name: A1
+    id: 4
+    name: a1
+    orientation:
+      w: 0.284589
+      x: 0.0
+      y: 0.0
+      z: -0.95865
+    position:
+      x: 14.1249
+      y: 1.95904
+      z: 0.0
+  - display_name: A2
+    id: 5
+    name: a2
+    orientation:
+      w: 0.999843
+      x: 0.0
+      y: 0.0
+      z: -0.0177032
+    position:
+      x: 13.6184
+      y: -1.86927
+      z: 0.0
+  - display_name: C0
+    id: 6
+    name: c0
+    orientation:
+      w: 0.231357
+      x: 0.0
+      y: 0.0
+      z: -0.972869
+    position:
+      x: -13.8175
+      y: -1.83536
+      z: 0.0
+  - display_name: C1
+    id: 7
+    name: c1
+    orientation:
+      w: 0.698339
+      x: 0.0
+      y: 0.0
+      z: -0.715768
+    position:
+      x: -12.1613
+      y: 2.05327
+      z: 0.0
+  - display_name: C2
+    id: 8
+    name: c2
+    orientation:
+      w: 0.147986
+      x: 0.0
+      y: 0.0
+      z: 0.988989
+    position:
+      x: -5.78258
+      y: 1.8673
+      z: 0.0
 frame_id: map
+
+
+# checkpoints:
+# - display_name: Home
+#   id: 0
+#   name: home
+#   orientation:
+#     w: 0.7057
+#     x: 0.0
+#     y: 0.0
+#     z: 0.7085
+#   position:
+#     x: -3.988
+#     y: -1.9888
+#     z: 0.0
+# - display_name: Library
+#   id: 1
+#   name: library
+#   orientation:
+#     w: 0.7046
+#     x: 0.0
+#     y: 0.0
+#     z: -0.7096
+#   position:
+#     x: 4.0156
+#     y: 1.9984
+#     z: 0.0
+# - display_name: Meeting Room
+#   id: 2
+#   name: meeting_room
+#   orientation:
+#     w: 1.0
+#     x: 0.0
+#     y: 0.0
+#     z: -0.0084
+#   position:
+#     x: 12.0041
+#     y: -0.6082
+#     z: 0.0
+# - display_name: Principal's Office
+#   id: 3
+#   name: principal_office
+#   orientation:
+#     w: 0.9994
+#     x: 0.0
+#     y: 0.0
+#     z: -0.0352
+#   position:
+#     x: 12.0183
+#     y: -0.6857
+#     z: 0.0
+# - display_name: Student Affairs
+#   id: 4
+#   name: student_affairs
+#   orientation:
+#     w: 0.7025
+#     x: 0.0
+#     y: 0.0
+#     z: -0.7117
+#   position:
+#     x: 5.9559
+#     y: 1.8607
+#     z: 0.0
+# frame_id: map
