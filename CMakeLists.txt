@@ -33,6 +33,7 @@ install(
     scripts/imu_reader.py
     scripts/navigator.py
     scripts/navigator_v2.py
+    scripts/navigator_v3.py
     scripts/checkpoint_cmd.py
     scripts/frontier_explorer.py
     scripts/map_saver_service.py
