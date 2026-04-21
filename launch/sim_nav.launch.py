@@ -14,7 +14,7 @@ def generate_launch_description():
     default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot_v2.urdf.xacro')
     default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room_v2.world')
     default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'nav_fusion_config.rviz')
-    nav2_params         = os.path.join(pkg_share, 'config', 'nav2_params.yaml')
+    nav2_params         = os.path.join(pkg_share, 'config', 'sim_nav2_params.yaml')
     map_file            = os.path.join(pkg_share, 'maps', 'sim_map_v2.yaml')
     checkpoint_file     = os.path.join(pkg_share, 'config', 'checkpoints.yaml')
 

@@ -100,12 +100,22 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        us_mid_left_link:
+        us_mid_1_left_link:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
-        us_mid_right_link:
+        us_mid_1_right_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        us_mid_2_left_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        us_mid_2_right_link:
           Alpha: 1
           Show Axes: false
           Show Trail: false
@@ -154,9 +164,13 @@ Visualization Manager:
           Value: true
         us_bot_right_link:
           Value: true
-        us_mid_left_link:
+        us_mid_1_left_link:
           Value: true
-        us_mid_right_link:
+        us_mid_1_right_link:
+          Value: true
+        us_mid_2_left_link:
+          Value: true
+        us_mid_2_right_link:
           Value: true
         us_top_left_link:
           Value: true
@@ -183,9 +197,13 @@ Visualization Manager:
                     {}
                   us_bot_right_link:
                     {}
-                  us_mid_left_link:
+                  us_mid_1_left_link:
                     {}
-                  us_mid_right_link:
+                  us_mid_1_right_link:
+                    {}
+                  us_mid_2_left_link:
+                    {}
+                  us_mid_2_right_link:
                     {}
                   us_top_left_link:
                     {}
@@ -274,7 +292,7 @@ Visualization Manager:
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
       Draw Behind: false
-      Enabled: true
+      Enabled: false
       Name: Global_Costmap
       Topic:
         Depth: 5
@@ -289,7 +307,7 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /global_costmap/costmap_updates
       Use Timestamp: false
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
@@ -322,58 +340,6 @@ Visualization Manager:
       Class: rviz_default_plugins/Range
       Color: 255; 255; 255
       Enabled: true
-      Name: bot_left
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /ultrasonic/us_bot_left
-      Value: true
-    - Alpha: 0.5
-      Buffer Length: 1
-      Class: rviz_default_plugins/Range
-      Color: 255; 255; 255
-      Enabled: true
-      Name: bot_right
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /ultrasonic/us_bot_right
-      Value: true
-    - Alpha: 0.5
-      Buffer Length: 1
-      Class: rviz_default_plugins/Range
-      Color: 255; 255; 255
-      Enabled: true
-      Name: mid_left
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /ultrasonic/us_mid_left
-      Value: true
-    - Alpha: 0.5
-      Buffer Length: 1
-      Class: rviz_default_plugins/Range
-      Color: 255; 255; 255
-      Enabled: true
-      Name: mid_right
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /ultrasonic/us_mid_right
-      Value: true
-    - Alpha: 0.5
-      Buffer Length: 1
-      Class: rviz_default_plugins/Range
-      Color: 255; 255; 255
-      Enabled: true
       Name: top_left
       Topic:
         Depth: 5
@@ -394,6 +360,84 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /ultrasonic/us_top_right
+      Value: true
+    - Alpha: 0.5
+      Buffer Length: 1
+      Class: rviz_default_plugins/Range
+      Color: 255; 255; 255
+      Enabled: true
+      Name: mid_1_left
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ultrasonic/us_mid_1_left
+      Value: true
+    - Alpha: 0.5
+      Buffer Length: 1
+      Class: rviz_default_plugins/Range
+      Color: 255; 255; 255
+      Enabled: true
+      Name: mid_1_right
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ultrasonic/us_mid_1_right
+      Value: true
+    - Alpha: 0.5
+      Buffer Length: 1
+      Class: rviz_default_plugins/Range
+      Color: 255; 255; 255
+      Enabled: true
+      Name: mid_2_left
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ultrasonic/us_mid_2_left
+      Value: true
+    - Alpha: 0.5
+      Buffer Length: 1
+      Class: rviz_default_plugins/Range
+      Color: 255; 255; 255
+      Enabled: true
+      Name: mid_2_right
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ultrasonic/us_mid_2_right
+      Value: true
+    - Alpha: 0.5
+      Buffer Length: 1
+      Class: rviz_default_plugins/Range
+      Color: 255; 255; 255
+      Enabled: true
+      Name: bot_left
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ultrasonic/us_bot_left
+      Value: true
+    - Alpha: 0.5
+      Buffer Length: 1
+      Class: rviz_default_plugins/Range
+      Color: 255; 255; 255
+      Enabled: true
+      Name: bot_right
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ultrasonic/us_bot_right
       Value: true
   Enabled: true
   Global Options:
@@ -425,25 +469,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 15.667434692382812
+      Distance: 8.575911521911621
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -5.201959133148193
-        Y: -1.2508444786071777
-        Z: -2.7635891437530518
+        X: -4.178138256072998
+        Y: -1.2046823501586914
+        Z: -3.863358736038208
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5402035713195801
+      Pitch: 0.6902036666870117
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 0.6831244230270386
+      Yaw: 0.2631245255470276
     Saved:
       - Class: rviz_default_plugins/Orbit
         Distance: 1.7000000476837158

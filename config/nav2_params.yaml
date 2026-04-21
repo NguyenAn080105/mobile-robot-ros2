@@ -307,43 +307,45 @@ controller_server_rclcpp_node:
 local_costmap:
   local_costmap:
     ros__parameters:
+      transform_tolerance: 0.5
       use_sim_time: True
-      global_frame: odom             # costmap theo dõi robot trong frame odom
-      plugin_names: ["obstacle_layer", "inflation_layer"]
-      plugin_types: ["nav2_costmap_2d::ObstacleLayer", "nav2_costmap_2d::InflationLayer"]
-      rolling_window: true           # cửa sổ di chuyển theo robot
-      width: 5                       # [m] chiều rộng cửa sổ
-      height: 5                      # [m] chiều cao cửa sổ
-      resolution: 0.05               # [m/ô lưới]
+      global_frame: odom
+      rolling_window: true
+      width: 5
+      height: 5
+      resolution: 0.05
       footprint_padding: 0.01
-      # Đa giác footprint của robot trong frame base_footprint [trước→sau, trái→phải].
       footprint: "[[0.355, 0.30], [0.355, -0.30], [-0.14, -0.30], [-0.14, 0.30]]"
       robot_base_frame: base_footprint
-      update_frequency: 20.0         # [Hz] phải khớp với controller_frequency
-      publish_frequency: 5.0         # [Hz] tần suất cập nhật RViz
+      update_frequency: 20.0
+      publish_frequency: 5.0
+
+      plugins: ["obstacle_layer", "inflation_layer"]
 
       obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
         observation_sources: scan ultrasonic
         scan:
           topic: /scan_filtered
           sensor_frame: laser_frame
-          max_obstacle_height: 2.0
-          clearing: True
-          marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 10.5
-          raytrace_min_range: 0.0
+          marking: True
+          clearing: True
+          max_obstacle_height: 2.0
+          min_obstacle_height: 0.0
           obstacle_max_range: 10.0
           obstacle_min_range: 0.0
-
+          raytrace_max_range: 10.5
+          raytrace_min_range: 0.0
+          inf_is_valid: false
         ultrasonic:
           topic: /ultrasonic_scan
           sensor_frame: base_footprint
-          data_type: LaserScan
+          data_type: "LaserScan"
           marking: True
           clearing: True
-          max_obstacle_height: 0.5
+          max_obstacle_height: 2.0
           min_obstacle_height: 0.0
           obstacle_max_range: 4.0
           obstacle_min_range: 0.02
@@ -353,10 +355,55 @@ local_costmap:
 
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 2.2     # tốc độ suy giảm mũ của chi phí theo khoảng cách từ vật cản
-        inflation_radius: 0.37        # [m]  bán kính phồng nề quanh vật cản
+        cost_scaling_factor: 2.2
+        inflation_radius: 0.37
 
       always_send_full_costmap: True
+
+      # obstacle_layer:
+      #   plugin: "nav2_costmap_2d::ObstacleLayer"
+      #   enabled: True
+      #   observation_sources: scan
+      #   scan:
+      #     topic: /scan_filtered
+      #     sensor_frame: laser_frame
+      #     data_type: "LaserScan"
+      #     marking: True
+      #     clearing: True
+      #     max_obstacle_height: 2.0
+      #     min_obstacle_height: 0.0
+      #     obstacle_max_range: 10.0
+      #     obstacle_min_range: 0.0
+      #     raytrace_max_range: 10.5
+      #     raytrace_min_range: 0.0
+      #     inf_is_valid: false
+
+      # range_layer:
+      #   plugin: "nav2_costmap_2d::RangeSensorLayer"
+      #   enabled: True
+      #   topics: [
+      #     "/ultrasonic/us_top_left",
+      #     "/ultrasonic/us_top_right",
+      #     "/ultrasonic/us_mid_left",
+      #     "/ultrasonic/us_mid_right",
+      #     "/ultrasonic/us_bot_left",
+      #     "/ultrasonic/us_bot_right"
+      #   ]
+      #   inflate_cone: 1.0
+      #   no_readings_timeout: 0.0
+      #   # ← ĐỔI: false để KHÔNG xóa khi max range, giữ mark lâu hơn để debug
+      #   clear_on_max_reading: false
+      #   clear_threshold: 0.2
+      #   mark_threshold: 0.8
+      #   input_sensor_type: VARIABLE
+      #   transform_tolerance: 0.5
+
+      # inflation_layer:
+      #   plugin: "nav2_costmap_2d::InflationLayer"
+      #   cost_scaling_factor: 2.2
+      #   inflation_radius: 0.37
+
+      # always_send_full_costmap: True
 
 # ==================== GLOBAL COSTMAP ====================
 # Costmap tĩnh + động toàn bản đồ — được bộ lập lịch toàn cục NavFn/A* sử dụng.

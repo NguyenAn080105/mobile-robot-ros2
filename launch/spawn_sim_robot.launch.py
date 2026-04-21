@@ -75,7 +75,7 @@ def generate_launch_description():
     # ====================== ULTRASONIC FUSION ======================
     ultrasonic_fusion = Node(
         package='mobile_robot',
-        executable='ultrasonic_fusion_node.py',
+        executable='ultrasonic_fusion_node_v2.py',
         name='ultrasonic_fusion_node',
         output='screen',
         parameters=[{'use_sim_time': use_sim_time}]
@@ -121,5 +121,5 @@ def generate_launch_description():
         delayed_spawn_entity,
         delayed_filter,
         delayed_ultrasonic_fusion,
-        # delayed_rviz2,
+        delayed_rviz2,
     ])

@@ -171,12 +171,15 @@
             </sensor>
         </gazebo>
     </xacro:macro>
-    <xacro:gazebo_ultrasonic name="us_top_left"   max_range="4.0" fov="0.2618"/>
-    <xacro:gazebo_ultrasonic name="us_top_right"  max_range="4.0" fov="0.2618"/>
+    <xacro:gazebo_ultrasonic name="us_top_left"   max_range="2.5" fov="0.2618"/>
+    <xacro:gazebo_ultrasonic name="us_top_right"  max_range="2.5" fov="0.2618"/>
 
-    <xacro:gazebo_ultrasonic name="us_mid_left"   max_range="4.0" fov="0.2618"/>
-    <xacro:gazebo_ultrasonic name="us_mid_right"  max_range="4.0" fov="0.2618"/>
+    <xacro:gazebo_ultrasonic name="us_mid_1_left"   max_range="2.5" fov="0.2618"/>
+    <xacro:gazebo_ultrasonic name="us_mid_1_right"  max_range="2.5" fov="0.2618"/>
 
-    <xacro:gazebo_ultrasonic name="us_bot_left"   max_range="0.5" fov="0.1745"/>
-    <xacro:gazebo_ultrasonic name="us_bot_right"  max_range="0.5" fov="0.1745"/>
+    <xacro:gazebo_ultrasonic name="us_mid_2_left"   max_range="2.5" fov="0.2618"/>
+    <xacro:gazebo_ultrasonic name="us_mid_2_right"  max_range="2.5" fov="0.2618"/>
+
+    <xacro:gazebo_ultrasonic name="us_bot_left"   max_range="2.5" fov="0.2618"/>
+    <xacro:gazebo_ultrasonic name="us_bot_right"  max_range="2.5" fov="0.2618"/>
 </robot>
