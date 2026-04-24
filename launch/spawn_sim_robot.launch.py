@@ -13,7 +13,7 @@ def generate_launch_description():
     pkg_gazebo_ros = get_package_share_directory('gazebo_ros')
 
     # ====================== PATH ======================
-    default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot_v2.urdf.xacro')
+    default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot_v3.urdf.xacro')
     default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room_v2.world')
     default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'rviz_config.rviz')
     ekf_config_path     = os.path.join(pkg_share, 'config', 'ekf.yaml')
@@ -75,7 +75,7 @@ def generate_launch_description():
     # ====================== ULTRASONIC FUSION ======================
     ultrasonic_fusion = Node(
         package='mobile_robot',
-        executable='ultrasonic_fusion_node_v2.py',
+        executable='ultrasonic_fusion_node_v3.py',
         name='ultrasonic_fusion_node',
         output='screen',
         parameters=[{'use_sim_time': use_sim_time}]
@@ -121,5 +121,5 @@ def generate_launch_description():
         delayed_spawn_entity,
         delayed_filter,
         delayed_ultrasonic_fusion,
-        delayed_rviz2,
+        # delayed_rviz2,
     ])

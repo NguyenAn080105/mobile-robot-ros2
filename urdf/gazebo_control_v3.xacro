@@ -138,18 +138,18 @@
                         <horizontal>
                             <samples>5</samples>
                             <resolution>1</resolution>
-                            <min_angle>${-fov/2}</min_angle>
-                            <max_angle>${fov/2}</max_angle>
+                            <min_angle>0</min_angle>
+                            <max_angle>0</max_angle>
                         </horizontal>
                         <vertical>
-                            <samples>5</samples>
+                            <samples>10</samples>
                             <resolution>1</resolution>
                             <min_angle>${-fov/2}</min_angle>
                             <max_angle>${fov/2}</max_angle>
                         </vertical>
                     </scan>
                     <range>
-                        <min>0.02</min>
+                        <min>0.01</min>
                         <max>${max_range}</max>
                         <resolution>0.01</resolution>
                     </range>
@@ -174,8 +174,11 @@
     <xacro:gazebo_ultrasonic name="us_top_left"   max_range="1.0" fov="0.2618"/>
     <xacro:gazebo_ultrasonic name="us_top_right"  max_range="1.0" fov="0.2618"/>
 
-    <xacro:gazebo_ultrasonic name="us_mid_left"   max_range="1.0" fov="0.2618"/>
-    <xacro:gazebo_ultrasonic name="us_mid_right"  max_range="1.0" fov="0.2618"/>
+    <xacro:gazebo_ultrasonic name="us_mid_1_left"   max_range="1.0" fov="0.2618"/>
+    <xacro:gazebo_ultrasonic name="us_mid_1_right"  max_range="1.0" fov="0.2618"/>
+
+    <xacro:gazebo_ultrasonic name="us_mid_2_left"   max_range="1.0" fov="0.2618"/>
+    <xacro:gazebo_ultrasonic name="us_mid_2_right"  max_range="1.0" fov="0.2618"/>
 
     <xacro:gazebo_ultrasonic name="us_bot_left"   max_range="1.0" fov="0.2618"/>
     <xacro:gazebo_ultrasonic name="us_bot_right"  max_range="1.0" fov="0.2618"/>

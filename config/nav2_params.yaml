@@ -120,183 +120,89 @@ bt_navigator_rclcpp_node:
 # ==================== CONTROLLER SERVER (DWB) ====================
 # Bộ lập lịch cục bộ dựa trên Cửa sổ Động (DWB) — lấy mẫu các cặp (vx, ω),
 # mô phỏng tiến, chấm điểm bằng các hàm critic, xuất cmd_vel tốt nhất.
-
-# controller_server:
-#   ros__parameters:
-#     use_sim_time: True
-#     controller_frequency: 20.0       # [Hz] tần suất xuất cmd_vel
-
-#     # Ngưỡng vận tốc dưới mức robot được coi là đứng yên.
-#     min_x_velocity_threshold: 0.001  # [m/s]
-#     min_y_velocity_threshold: 0.001  # [m/s] (không dùng — dẫn động vi sai)
-#     min_theta_velocity_threshold: 0.001 # [rad/s]
-
-#     # FIX: Thêm progress_checker để tuning timeout "Failed to make progress"
-#     progress_checker_plugin: "progress_checker"
-#     progress_checker:
-#       plugin: "nav2_controller::SimpleProgressChecker"
-#       required_movement_radius: 0.1   # [m] phải di chuyển ít nhất 10cm
-#       movement_time_allowance: 15.0   # [s] trong vòng 15s (was mặc định 5s → quá ngắn)
- 
-#     # FIX: Thêm goal_checker riêng để control tolerance
-#     goal_checker_plugin: "goal_checker"
-#     goal_checker:
-#       plugin: "nav2_controller::SimpleGoalChecker"
-#       xy_goal_tolerance: 0.25
-#       yaw_goal_tolerance: 0.15
-#       stateful: True
-
-#     controller_plugins: ["FollowPath"]
-
-#     FollowPath:
-#       plugin: "dwb_core::DWBLocalPlanner"
-#       debug_trajectory_details: False
-
-#       # ── Giới hạn vận tốc ──────────────────────────────────────────────────
-#       # v_max phần cứng = 0.5 m/s; giảm 30 % vì an toàn → 0.346 m/s
-#       min_vel_x: 0.0               # [m/s] không điều khiển lùi
-#       min_vel_y: 0.0               # [m/s] không dịch ngang (dẫn động vi sai)
-#       max_vel_x: 0.6               # [m/s] giới hạn vận tốc tiến
-#       max_vel_y: 0.0               # [m/s] không dịch ngang (dẫn động vi sai)
-#       max_vel_theta: 1.5         # [rad/s] giới hạn tốc độ góc (≈ giới hạn phần cứng)
-#       min_vel_theta: -1.5
-#       min_speed_xy: 0.0            # [m/s] tốc độ XY kết hợp tối thiểu
-#       max_speed_xy: 0.6            # [m/s] tốc độ XY kết hợp tối đa
-
-#       # ── Giới hạn gia tốc / giảm tốc ──────────────────────────────────────
-#       # Dốc tăng tốc nhẹ nhàng để ngăn trượt bánh và giảm nhiễu rung IMU.
-#       acc_lim_x: 0.1              # [m/s²]  từ 0 lên tối đa trong ≈ 4 s
-#       acc_lim_y: 0.0               # [m/s²]  dẫn động vi sai
-#       acc_lim_theta: 1.15           # [rad/s²]
-
-#       decel_lim_x: -0.35           # [m/s²]  dốc phanh (gấp 2× gia tốc để dừng chặt hơn)
-#       decel_lim_y: 0.0
-#       decel_lim_theta: -1.25      # [rad/s²]
-
-#       # ── Lấy mẫu quỹ đạo ──────────────────────────────────────────────────
-#       vx_samples: 15               # số mẫu vận tốc tuyến tính trong cửa sổ động
-#       vy_samples: 1               # không lấy mẫu ngang
-#       vtheta_samples: 15           # số mẫu vận tốc góc
-
-#       # ── Mô phỏng tiến ───────────────────────────────────────────────────
-#       sim_time: 1.5                # [s]   độ dài chân trời rollout
-#       linear_granularity: 0.05     # [m]   bước cung tròn để kiểm tra va chạm
-#       angular_granularity: 0.025   # [rad] bước góc để kiểm tra va chạm
-#       transform_tolerance: 0.5     # [s]   dung sai tuổi tra cứu TF
-#       trans_stopped_velocity: 0.02 # [m/s] ngưỡng tốc độ xác định "robot đứng yên"
-#       short_circuit_trajectory_evaluation: True # huỷ chấm điểm ngay khi chạm vùng chi phí chết người
-#       stateful: True               # giữ lại hướng tốt nhất cuối cùng qua các chu kỳ tick
-
-#       # ── Dung sai đích ────────────────────────────────────────────────────
-#       xy_goal_tolerance: 0.25      # [m]   dung sai vị trí tại đích
-#       yaw_goal_tolerance: 0.25     # [rad] dung sai góc tại đích (~14°)
-
-#       # ── Các hàm chấm điểm (critic) ───────────────────────────────────────
-#       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-
-#       BaseObstacle.scale: 80.0               # phạt khi tiếp cận vật cản chết người/phồng nề
-#       PathAlign.scale: 24.0                  # phạt khi lệch hướng so với đường dẫn toàn cục
-#       PathAlign.forward_point_distance: 0.4  # [m] khoảng cách nhìn trước để chấm điểm căn chỉnh đường dẫn
-#       GoalAlign.scale: 12.0                  # phạt khi lệch hướng so với hướng đến đích
-#       GoalAlign.forward_point_distance: 0.4  # [m]
-#       PathDist.scale: 24.0                   # phạt khoảng cách ngang so với đường dẫn toàn cục
-#       GoalDist.scale: 24.0                   # phạt khoảng cách Euclid đến đích
-#       RotateToGoal.scale: 32.0               # xoay tại chỗ khi gần đến đích
-#       RotateToGoal.slowing_factor: 2.0       # hệ số giảm vận tốc trong quá trình xoay
-#       RotateToGoal.lookahead_time: -1.0      # âm → vô hiệu hóa
-
 controller_server:
   ros__parameters:
-    # ── Thông số hệ thống cơ bản ───────────────────────────────────────
-    use_sim_time: True                            # [bool]  Sử dụng thời gian mô phỏng (Gazebo)
-    controller_frequency: 20.0                    # [Hz]    Tần số vòng lặp điều khiển (20Hz = 50ms xuất lệnh vận tốc 1 lần)
-    
-    # ── Ngưỡng dừng (Zero-Velocity Thresholds) ─────────────────────────
-    # Dưới các mức này, controller sẽ coi như robot đang đứng yên (hữu ích để tránh rung lắc motor)
-    min_x_velocity_threshold: 0.001               # [m/s]   Ngưỡng vận tốc tối thiểu trục X 
-    min_y_velocity_threshold: 0.5                 # [m/s]   Ngưỡng vận tốc tối thiểu trục Y (Diff-drive không đi ngang nên set cao để bỏ qua)
-    min_theta_velocity_threshold: 0.001           # [rad/s] Ngưỡng vận tốc xoay tối thiểu 
-    
-    # ── Plugins ────────────────────────────────────────────────────────
-    progress_checker_plugins: ["progress_checker"] # [list]  Tên plugin kiểm tra tiến độ di chuyển
-    goal_checker_plugins: ["goal_checker"]         # [list]  Tên plugin kiểm tra xem đã tới đích chưa
-    controller_plugins: ["FollowPath"]             # [list]  Tên plugin điều khiển (Local Planner)
+    use_sim_time: True
+    controller_frequency: 20.0       # [Hz] tần suất xuất cmd_vel
 
-    # ── Cấu hình Progress Checker ──────────────────────────────────────
-    # Chống kẹt: Nếu robot không đi được quãng đường X trong thời gian Y, sẽ báo lỗi để kích hoạt Recovery
+    # Ngưỡng vận tốc dưới mức robot được coi là đứng yên.
+    min_x_velocity_threshold: 0.001  # [m/s]
+    min_y_velocity_threshold: 0.001  # [m/s] (không dùng — dẫn động vi sai)
+    min_theta_velocity_threshold: 0.05 # [rad/s]
+
+    progress_checker_plugins: ["progress_checker"]
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.5               # [m]     Bán kính tối thiểu bắt buộc robot phải đi qua...
-      movement_time_allowance: 10.0               # [s]     ...trong khoảng thời gian tối đa này. Nếu không sẽ báo kẹt.
-
-    # ── Cấu hình Goal Checker ──────────────────────────────────────────
-    # Điều kiện để Nav2 xác nhận robot đã "Đến Đích" (Goal Reached)
+      required_movement_radius: 0.1   # [m] phải di chuyển ít nhất 10cm
+      movement_time_allowance: 15.0   # [s] trong vòng 15s (was mặc định 5s → quá ngắn)
+ 
+    # FIX: Thêm goal_checker riêng để control tolerance
+    goal_checker_plugins: ["goal_checker"]
     goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25                     # [m]     Sai số vị trí (bán kính) chấp nhận được khi tới đích
-      yaw_goal_tolerance: 0.25                    # [rad]   Sai số góc hướng (~14.3 độ) chấp nhận được khi tới đích
-      stateful: True                              # [bool]  Lưu trạng thái (hỗ trợ việc đến đúng vị trí X-Y trước rồi mới xoay tại chỗ cho đúng góc Yaw)
+      xy_goal_tolerance: 0.25
+      yaw_goal_tolerance: 0.2
+      stateful: True
 
-    # ── Cấu hình Regulated Pure Pursuit (RPP) ──────────────────────────
+    controller_plugins: ["FollowPath"]
+
     FollowPath:
-      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      
-      # ── Vận tốc (Velocities) ─────────────────────────────────────────
-      desired_linear_vel: 0.5                     # [m/s]   Vận tốc tiến mong muốn (tốc độ hành trình khi đường thẳng)
-      max_linear_vel: 0.5                         # [m/s]   Vận tốc tiến tối đa tuyệt đối
-      min_linear_vel: 0.0                         # [m/s]   Vận tốc lùi tối đa (âm là lùi)
-      max_angular_vel: 2.5                        # [rad/s] Vận tốc xoay tối đa khi di chuyển
-      min_angular_vel: -2.5                       # [rad/s] Vận tốc xoay tối đa (chiều ngược lại)
-      
-      # ── Gia tốc (Accelerations) ──────────────────────────────────────
-      # Lưu ý: Robot 30kg có quán tính lớn, nên set decel thấp hơn accel để có quãng đường phanh dài hơn
-      max_linear_accel: 2.5                       # [m/s²]  Gia tốc tiến tối đa (tăng tốc độ bốc)
-      max_linear_decel: -0.8                      # [m/s²]
-      max_angular_accel: 3.2                      # [rad/s²] Gia tốc góc, giúp robot không bị giật cục khi bắt đầu xoay
-      max_angular_decel: -3.2                     # [rad/s²] Gia tốc hãm góc (phanh xoay)
-      
-      # ── Thuật toán Bám đường (Lookahead) ─────────────────────────────
-      # Tìm một "điểm ảo" (carrot) phía trước trên quỹ đạo để robot hướng đầu bám theo
-      lookahead_dist: 2.0                         # [m]     Khoảng cách nhìn trước cố định (nếu tắt velocity_scaled)
-      min_lookahead_dist: 0.9                     # [m]     Khoảng cách nhìn trước tối thiểu (khi đi rất chậm)
-      max_lookahead_dist: 2.0                     # [m]     Khoảng cách nhìn trước tối đa (khi đi nhanh)
-      lookahead_time: 1.5                         # [s]     Thời gian dự phóng (Lookahead_dist = Vận_tốc_hiện_tại * lookahead_time)
-      use_velocity_scaled_lookahead_dist: false   # [bool]  Nội suy khoảng cách nhìn trước dựa theo vận tốc đang chạy
-      
-      # ── Giảm tốc khi vào cua (Curvature Scaling) ─────────────────────
-      # Giúp robot tự động rà phanh khi gặp khúc cua gắt để tránh văng do ly tâm
-      use_regulated_linear_velocity_scaling: true # [bool]  BẬT tính năng hãm phanh khi vào khúc cua
-      use_fixed_curvature_lookahead: false        # [bool]  Dùng khoảng cách cố định để tính độ cong của đường
-      curvature_lookahead_dist: 0.25              # [m]     Khoảng cách để tính độ cong (nếu bật cờ trên)
-      regulated_linear_scaling_min_radius: 0.9    # [m]     Bán kính cong tối thiểu của đường để kích hoạt hãm phanh
-      regulated_linear_scaling_min_speed: 0.25    # [m/s]   Vận tốc thấp nhất mà robot duy trì khi đang qua khúc cua
-      
-      # ── Giảm tốc khi gần vật cản (Cost Scaling) ──────────────────────
-      use_cost_regulated_linear_velocity_scaling: false # [bool] BẬT tự động hãm phanh khi đi sát tường/vật cản
-      cost_scaling_dist: 0.3                      # [m]     Khoảng cách từ vật cản bắt đầu tính toán hãm tốc
-      cost_scaling_gain: 1.0                      # [float] Hệ số nhân (càng lớn giảm tốc càng mạnh)
-      
-      # ── Tiếp cận đích (Approach) ─────────────────────────────────────
-      approach_velocity_scaling_dist: 0.6         # [m]     Khoảng cách bắt đầu rà phanh khi chuẩn bị tới điểm đích
-      min_approach_linear_velocity: 0.05          # [m/s]   Vận tốc trườn từ từ tối thiểu khi bò sát vào điểm đích
-      
-      # ── Tránh va chạm động (Collision Detection) ─────────────────────
-      use_collision_detection: true               # [bool]  BẬT tự động kiểm tra mô phỏng va chạm trên đường đi
-      max_allowed_time_to_collision_up_to_carrot: 1.0 # [s] Thời gian tối đa được phép đi tiếp trước khi tông vật cản (dưới mức này robot sẽ dừng)
-      allow_obstacle_checking_beyond_goal: false  # [bool]  Quét vật cản ở phía sau cả điểm đích (Tắt đi để robot dễ vào đích nếu đích sát tường)
-      min_distance_to_obstacle: 0.0               # [m]     Khoảng cách đệm bù trừ thêm cho footprint khi tính va chạm
+      plugin: "dwb_core::DWBLocalPlanner"
+      debug_trajectory_details: False
 
-      # ── Cơ chế xoay tại chỗ (Rotate to Heading) ──────────────────────
-      # Giải quyết lỗi đi vòng cung lớn: Bắt robot xoay đầu chuẩn góc rồi mới được vặn ga tiến
-      use_rotate_to_heading: true                 # [bool]  BẬT tính năng xoay tại chỗ trước khi tiến
-      rotate_to_heading_min_angle: 0.785          # [rad]   ~45 độ. Nếu góc lệch của path > 45 độ, robot sẽ xoay tại chỗ trước
-      rotate_to_heading_angular_vel: 1.0          # [rad/s] Vận tốc xoay tại chỗ (không dùng max_angular_vel lúc đang tiến)
-      transform_tolerance: 0.2                    # [s]     Dung sai tuổi tra cứu TF khi xoay tại chỗ (nên thấp hơn khi di chuyển để phản hồi nhanh hơn)
-      
-      # ── Các thông số trạng thái & động học khác ──────────────────────
-      allow_reversing: false                      # [bool]  Cho phép robot đi lùi nguyên cả đoạn đường thẳng (Diff drive nên TẮT)
-      stateful: true                              # [bool]  Giữ lại trạng thái tính toán từ chu kỳ trước (cần thiết cho RPP hoạt động ổn định)
-      use_dynamic_window: false                   # [bool]  Kiểm tra giới hạn động học (DWA window). Thường tắt ở RPP để đi mượt hơn
+      # ── Giới hạn vận tốc ──────────────────────────────────────────────────
+      # v_max phần cứng = 0.5 m/s; giảm 30 % vì an toàn → 0.346 m/s
+      min_vel_x: 0.0               # [m/s] không điều khiển lùi
+      min_vel_y: 0.0               # [m/s] không dịch ngang (dẫn động vi sai)
+      max_vel_x: 0.4               # [m/s] giới hạn vận tốc tiến
+      max_vel_y: 0.0               # [m/s] không dịch ngang (dẫn động vi sai)
+      max_vel_theta: 1.5           # [rad/s] giới hạn tốc độ góc (≈ giới hạn phần cứng)
+      min_vel_theta: -1.5          # [rad/s] giới hạn tốc độ góc ngược (≈ giới hạn phần cứng)
+      min_speed_theta: 0.4        # [rad/s] tốc độ góc tối thiểu để thắng ma sát tĩnh và xoay tại chỗ
+      min_speed_xy: 0.0            # [m/s] tốc độ XY kết hợp tối thiểu
+      max_speed_xy: 0.4            # [m/s] tốc độ XY kết hợp tối đa
+
+      # ── Giới hạn gia tốc / giảm tốc ──────────────────────────────────────
+      # Dốc tăng tốc nhẹ nhàng để ngăn trượt bánh và giảm nhiễu rung IMU.
+      acc_lim_x: 0.1              # [m/s²]  từ 0 lên tối đa trong ≈ 4 s
+      acc_lim_y: 0.0               # [m/s²]  dẫn động vi sai
+      acc_lim_theta: 1.0           # [rad/s²]
+
+      decel_lim_x: -0.35           # [m/s²]  dốc phanh (gấp 2× gia tốc để dừng chặt hơn)
+      decel_lim_y: 0.0
+      decel_lim_theta: -1.0      # [rad/s²]
+
+      # ── Lấy mẫu quỹ đạo ──────────────────────────────────────────────────
+      vx_samples: 10               # số mẫu vận tốc tuyến tính trong cửa sổ động
+      vy_samples: 1               # không lấy mẫu ngang
+      vtheta_samples: 20           # số mẫu vận tốc góc
+
+      # ── Mô phỏng tiến ───────────────────────────────────────────────────
+      sim_time: 1.5                # [s]   độ dài chân trời rollout
+      linear_granularity: 0.05     # [m]   bước cung tròn để kiểm tra va chạm
+      angular_granularity: 0.025   # [rad] bước góc để kiểm tra va chạm
+      transform_tolerance: 0.5     # [s]   dung sai tuổi tra cứu TF
+      trans_stopped_velocity: 0.02 # [m/s] ngưỡng tốc độ xác định "robot đứng yên"
+      short_circuit_trajectory_evaluation: True # huỷ chấm điểm ngay khi chạm vùng chi phí chết người
+      stateful: True               # giữ lại hướng tốt nhất cuối cùng qua các chu kỳ tick
+
+      # ── Dung sai đích ────────────────────────────────────────────────────
+      xy_goal_tolerance: 0.25      # [m]   dung sai vị trí tại đích
+      yaw_goal_tolerance: 0.2     # [rad] dung sai góc tại đích (~10 độ)
+
+      # ── Các hàm chấm điểm (critic) ───────────────────────────────────────
+      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+
+      BaseObstacle.scale: 150.0              # phạt khi tiếp cận vật cản chết người/phồng nề
+      PathAlign.scale: 24.0                  # phạt khi lệch hướng so với đường dẫn toàn cục
+      PathAlign.forward_point_distance: 0.4  # [m] khoảng cách nhìn trước để chấm điểm căn chỉnh đường dẫn
+      GoalAlign.scale: 12.0                  # phạt khi lệch hướng so với hướng đến đích
+      GoalAlign.forward_point_distance: 0.4  # [m]
+      PathDist.scale: 24.0                   # phạt khoảng cách ngang so với đường dẫn toàn cục
+      GoalDist.scale: 24.0                   # phạt khoảng cách Euclid đến đích
+      RotateToGoal.scale: 32.0               # xoay tại chỗ khi gần đến đích
+      RotateToGoal.slowing_factor: 2.0       # hệ số giảm vận tốc trong quá trình xoay
+      RotateToGoal.lookahead_time: -1.0      # âm → vô hiệu hóa
 
 controller_server_rclcpp_node:
   ros__parameters:
@@ -359,51 +265,6 @@ local_costmap:
         inflation_radius: 0.37
 
       always_send_full_costmap: True
-
-      # obstacle_layer:
-      #   plugin: "nav2_costmap_2d::ObstacleLayer"
-      #   enabled: True
-      #   observation_sources: scan
-      #   scan:
-      #     topic: /scan_filtered
-      #     sensor_frame: laser_frame
-      #     data_type: "LaserScan"
-      #     marking: True
-      #     clearing: True
-      #     max_obstacle_height: 2.0
-      #     min_obstacle_height: 0.0
-      #     obstacle_max_range: 10.0
-      #     obstacle_min_range: 0.0
-      #     raytrace_max_range: 10.5
-      #     raytrace_min_range: 0.0
-      #     inf_is_valid: false
-
-      # range_layer:
-      #   plugin: "nav2_costmap_2d::RangeSensorLayer"
-      #   enabled: True
-      #   topics: [
-      #     "/ultrasonic/us_top_left",
-      #     "/ultrasonic/us_top_right",
-      #     "/ultrasonic/us_mid_left",
-      #     "/ultrasonic/us_mid_right",
-      #     "/ultrasonic/us_bot_left",
-      #     "/ultrasonic/us_bot_right"
-      #   ]
-      #   inflate_cone: 1.0
-      #   no_readings_timeout: 0.0
-      #   # ← ĐỔI: false để KHÔNG xóa khi max range, giữ mark lâu hơn để debug
-      #   clear_on_max_reading: false
-      #   clear_threshold: 0.2
-      #   mark_threshold: 0.8
-      #   input_sensor_type: VARIABLE
-      #   transform_tolerance: 0.5
-
-      # inflation_layer:
-      #   plugin: "nav2_costmap_2d::InflationLayer"
-      #   cost_scaling_factor: 2.2
-      #   inflation_radius: 0.37
-
-      # always_send_full_costmap: True
 
 # ==================== GLOBAL COSTMAP ====================
 # Costmap tĩnh + động toàn bản đồ — được bộ lập lịch toàn cục NavFn/A* sử dụng.

@@ -52,7 +52,8 @@ SENSOR_HEIGHT = {
 class UltrasonicFusionNode(Node):
 
     # ── Ngưỡng phát hiện vật cản (tất cả sensors ngang) ────────────────────
-    OBSTACLE_THRESHOLD = 0.55
+    OBSTACLE_THRESHOLD = 0.4  # m — nếu sensor đọc < 0.4m → có vật cản (cảnh báo nguy hiểm)
+    SENSOR_X_OFFSET = 0.35
 
     # ── Drop detection cho us_bot ────────────────────────────────────────────
     # us_bot ở z≈0.20m, pitch=0° → tia bắn ngang, KHÔNG chạm sàn khi không có vật cản
@@ -81,14 +82,14 @@ class UltrasonicFusionNode(Node):
         # Tất cả pitch = 0.0 vì rpy="0 0 0"
         # Angle: left sensors ở +y → góc dương, right sensors ở -y → góc âm
         self.sensor_angles = {
-            'us_top_left':    (math.radians( 26), 0.0),
-            'us_top_right':   (math.radians(-26), 0.0),
-            'us_mid_1_left':  (math.radians( 26), 0.0),
-            'us_mid_1_right': (math.radians(-26), 0.0),
-            'us_mid_2_left':  (math.radians( 26), 0.0),
-            'us_mid_2_right': (math.radians(-26), 0.0),
-            'us_bot_left':    (math.radians( 26), 0.0),
-            'us_bot_right':   (math.radians(-26), 0.0),
+            'us_top_left':    (math.radians(0), 0.0),
+            'us_top_right':   (math.radians(0), 0.0),
+            'us_mid_1_left':  (math.radians(0), 0.0),
+            'us_mid_1_right': (math.radians(0), 0.0),
+            'us_mid_2_left':  (math.radians(0), 0.0),
+            'us_mid_2_right': (math.radians(0), 0.0),
+            'us_bot_left':    (math.radians(0), 0.0),
+            'us_bot_right':   (math.radians(0), 0.0),
         }
 
         self._last_cancel_time = 0.0
@@ -186,23 +187,21 @@ class UltrasonicFusionNode(Node):
 
     # ────────────────────────────────────────────────────────────────────────
     def _publish_scan(self):
-        """
-        Xuất LaserScan từ tất cả 8 sensors để costmap (RangeSensorLayer) xử lý.
-        Vì tất cả sensors ngang (pitch=0°), horizontal distance = raw range trực tiếp.
-        """
         num_rays = 360
         ranges   = [float('inf')] * num_rays
-        spread   = 8  # ±8 ray spread cho FOV của sensor
+        spread   = 8
+
+        angle_min_scan = -math.pi
+        angle_increment = 2 * math.pi / num_rays
 
         for name, (angle_rad, pitch) in self.sensor_angles.items():
             raw = self.latest[name]
             if raw == float('inf'):
                 continue
 
-            # pitch = 0° → horizontal distance = raw (cos(0) = 1)
-            dist = raw  # không cần compensate
+            dist = raw + self.SENSOR_X_OFFSET
+            center_idx = int(round((angle_rad - angle_min_scan) / angle_increment)) % num_rays
 
-            center_idx = int(round(math.degrees(angle_rad))) % num_rays
             for offset in range(-spread, spread + 1):
                 idx = (center_idx + offset) % num_rays
                 cos_val = math.cos(math.radians(offset * (15.0 / spread)))
@@ -217,8 +216,8 @@ class UltrasonicFusionNode(Node):
         scan.angle_increment = 2 * math.pi / num_rays
         scan.time_increment  = 0.0
         scan.scan_time       = 0.1
-        scan.range_min       = 0.02
-        scan.range_max       = 4.0
+        scan.range_min       = 0.01
+        scan.range_max       = 1.5
         scan.ranges          = ranges
 
         self.scan_pub.publish(scan)
@@ -240,7 +239,7 @@ class UltrasonicFusionNode(Node):
 
         msg = Bool()
         msg.data = True
-        self._estop_pub.publish(msg)
+        self._estop_pub.publish(msg)    
         self.get_logger().warn('[SAFETY] Published emergency_stop=True')
 
     # ────────────────────────────────────────────────────────────────────────

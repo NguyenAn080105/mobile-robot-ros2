@@ -235,8 +235,8 @@ class UltrasonicFusionNode(Node):
         scan.angle_increment = 2 * math.pi / num_rays
         scan.time_increment  = 0.0
         scan.scan_time       = 0.1
-        scan.range_min       = 0.02
-        scan.range_max       = 4.0
+        scan.range_min       = 0.01
+        scan.range_max       = 2.5
         scan.ranges          = ranges
 
         self.scan_pub.publish(scan)

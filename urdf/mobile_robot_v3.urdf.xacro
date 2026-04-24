@@ -45,7 +45,7 @@
         </inertial>
     </xacro:macro>
 
-    <xacro:include filename="gazebo_control_v2.xacro" />
+    <xacro:include filename="gazebo_control_v3.xacro" />
 
     <!-- ==================== PROPERTIES ==================== -->
     <xacro:property name="chassis_length" value="0.38"/>
@@ -186,12 +186,12 @@
     <joint name="laser_joint" type="fixed">
         <parent link="chassis"/>
         <child link="laser_frame"/>
-        <origin xyz="0.257 0 0.075" rpy="0 0 0"/>
+        <origin xyz="0.257 0 0.075" rpy="0 0 3.14159"/>
     </joint>
 
     <link name="laser_frame">
         <visual>
-            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <origin xyz="0 0 0" rpy="0 0 3.14159"/>
             <geometry>
                 <!-- <cylinder length="0.04" radius="0.038"/> -->
                 <mesh filename="package://mobile_robot/meshes/RPLiDAR_s2.stl" scale="0.001 0.001 0.001"/>
@@ -199,10 +199,10 @@
             <material name="black"/>
         </visual>
         <collision>
-            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <origin xyz="0 0 0" rpy="0 0 3.14159"/>
             <geometry>
-                <!-- <cylinder length="0.04" radius="0.038"/> -->
-                <mesh filename="package://mobile_robot/meshes/RPLiDAR_s2.stl" scale="0.001 0.001 0.001"/>
+                <cylinder length="0.04" radius="0.038"/>
+                <!-- <mesh filename="package://mobile_robot/meshes/RPLiDAR_s2.stl" scale="0.001 0.001 0.001"/> -->
             </geometry>
         </collision>
         <xacro:inertial_cylinder mass="0.1" length="0.04" radius="0.038">
@@ -237,13 +237,13 @@
     <xacro:macro name="ultrasonic_link" params="name">
         <link name="${name}_link">
             <visual>
-                <geometry><box size="0.015 0.04 0.02"/></geometry>
+                <geometry><box size="0.015 0.02 0.04"/></geometry>
                 <material name="blue"/>
             </visual>
             <collision>
-                <geometry><box size="0.015 0.04 0.02"/></geometry>
+                <geometry><box size="0.015 0.02 0.04"/></geometry>
             </collision>
-            <xacro:inertial_box mass="0.01" x="0.015" y="0.04" z="0.02">
+            <xacro:inertial_box mass="0.01" x="0.015" y="0.02" z="0.04">
                 <origin xyz="0 0 0" rpy="0 0 0"/>
             </xacro:inertial_box>
         </link>
@@ -252,42 +252,56 @@
     <joint name="us_top_left_joint" type="fixed">
         <parent link="chassis"/>
         <child link="us_top_left_link"/>
-        <origin xyz="0.35 0.17 0.49" rpy="0 0.4363 0"/>
+        <origin xyz="0.35 0.17 0.48" rpy="0 0 0"/>
     </joint>
     <xacro:ultrasonic_link name="us_top_left"/>
 
     <joint name="us_top_right_joint" type="fixed">
         <parent link="chassis"/>
         <child link="us_top_right_link"/>
-        <origin xyz="0.35 -0.17 0.49" rpy="0 0.4363 0"/>
+        <origin xyz="0.35 -0.17 0.48" rpy="0 0 0"/>
     </joint>
     <xacro:ultrasonic_link name="us_top_right"/>
 
-    <joint name="us_mid_left_joint" type="fixed">
+    <joint name="us_mid_1_left_joint" type="fixed">
         <parent link="chassis"/>
-        <child link="us_mid_left_link"/>
-        <origin xyz="0.35 0.17 0.257" rpy="0 -0.2618 0"/>
+        <child link="us_mid_1_left_link"/>
+        <origin xyz="0.35 0.17 0.36" rpy="0 0 0"/>
     </joint>
-    <xacro:ultrasonic_link name="us_mid_left"/>
+    <xacro:ultrasonic_link name="us_mid_1_left"/>
 
-    <joint name="us_mid_right_joint" type="fixed">
+    <joint name="us_mid_1_right_joint" type="fixed">
         <parent link="chassis"/>
-        <child link="us_mid_right_link"/>
-        <origin xyz="0.35 -0.17 0.257" rpy="0 -0.2618 0"/>
+        <child link="us_mid_1_right_link"/>
+        <origin xyz="0.35 -0.17 0.36" rpy="0 0 0"/>
     </joint>
-    <xacro:ultrasonic_link name="us_mid_right"/>
+    <xacro:ultrasonic_link name="us_mid_1_right"/>
+
+    <joint name="us_mid_2_left_joint" type="fixed">
+        <parent link="chassis"/>
+        <child link="us_mid_2_left_link"/>
+        <origin xyz="0.35 0.17 0.24" rpy="0 0 0"/>
+    </joint>
+    <xacro:ultrasonic_link name="us_mid_2_left"/>
+
+    <joint name="us_mid_2_right_joint" type="fixed">
+        <parent link="chassis"/>
+        <child link="us_mid_2_right_link"/>
+        <origin xyz="0.35 -0.17 0.24" rpy="0 0 0"/>
+    </joint>
+    <xacro:ultrasonic_link name="us_mid_2_right"/>
 
     <joint name="us_bot_left_joint" type="fixed">
         <parent link="chassis"/>
         <child link="us_bot_left_link"/>
-        <origin xyz="0.35 0.17 0.03" rpy="0 0.2618 0"/>
+        <origin xyz="0.35 0.17 0.12" rpy="0 0 0"/>
     </joint>
     <xacro:ultrasonic_link name="us_bot_left"/>
 
     <joint name="us_bot_right_joint" type="fixed">
         <parent link="chassis"/>
         <child link="us_bot_right_link"/>
-        <origin xyz="0.35 -0.17 0.03" rpy="0 0.2618 0"/>
+        <origin xyz="0.35 -0.17 0.12" rpy="0 0 0"/>
     </joint>
     <xacro:ultrasonic_link name="us_bot_right"/>
 
