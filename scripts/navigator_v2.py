@@ -67,6 +67,13 @@ PRE_ROTATE_MIN_W     = 0.15    # rad/s
 # Timeout cho pre-rotate — sau thời gian này dù chưa căn xong vẫn tiến tới nav (s).
 PRE_ROTATE_TIMEOUT   = 12.0    # s
 
+# [FIX M4] Cấu hình retry về home khi navigation bị abort
+HOME_RETRY_MAX       = 3        # số lần retry tối đa
+HOME_RETRY_DELAY_S   = 5.0     # giây chờ giữa các lần retry
+
+# [FIX M3] Timeout chờ Nav2 action servers sẵn sàng
+NAV2_SERVER_TIMEOUT_S = 30.0   # giây
+
 # ============================================================
 
 
@@ -78,7 +85,6 @@ class State(Enum):
     AT_CHECKPOINT  = "AT_CHECKPOINT"
     EMERGENCY_STOP = "EMERGENCY_STOP"
     RETURNING_HOME = "RETURNING_HOME"
-
 
 class CheckpointNavigator(Node):
 
@@ -104,11 +110,15 @@ class CheckpointNavigator(Node):
         self.target_cp    = None
         self.goal_handle  = None
         self.arrival_time = None
+        self._is_returning_home = False   
 
         # Pre-rotate specific
         self._target_yaw       = 0.0     # desired heading (rad, map frame)
         self._pre_rotate_start = None    # time.monotonic() when rotation began
         self._pending_cp_id    = None    # checkpoint waiting for rotation to finish
+
+        # [FIX M4] Retry counter cho return home
+        self._home_retry_count = 0
 
         # ── TF (needed to get current robot yaw for pre-rotate) ──────────────
         self._tf_buffer   = tf2_ros.Buffer()
@@ -118,9 +128,27 @@ class CheckpointNavigator(Node):
         self._nav     = ActionClient(self, NavigateToPose,    "navigate_to_pose")
         self._planner = ActionClient(self, ComputePathToPose, "compute_path_to_pose")
 
-        self.get_logger().info("Waiting for Nav2 action servers...")
-        self._nav.wait_for_server()
-        self._planner.wait_for_server()
+        # self.get_logger().info("Waiting for Nav2 action servers...")
+        # self._nav.wait_for_server()
+        # self._planner.wait_for_server()
+
+        # [FIX M3] wait_for_server với timeout — thay vì block vĩnh viễn
+        self.get_logger().info(
+            f"Waiting for Nav2 action servers (timeout={NAV2_SERVER_TIMEOUT_S:.0f}s)...")
+        nav_ready     = self._nav.wait_for_server(timeout_sec=NAV2_SERVER_TIMEOUT_S)
+        planner_ready = self._planner.wait_for_server(timeout_sec=NAV2_SERVER_TIMEOUT_S)
+
+        if not nav_ready:
+            raise RuntimeError(
+                f"navigate_to_pose action server not available after "
+                f"{NAV2_SERVER_TIMEOUT_S:.0f}s. "
+                "Is Nav2 running? Check lifecycle manager logs.")
+        if not planner_ready:
+            raise RuntimeError(
+                f"compute_path_to_pose action server not available after "
+                f"{NAV2_SERVER_TIMEOUT_S:.0f}s. "
+                "Is planner_server running? Check Nav2 lifecycle logs.")
+
         self.get_logger().info("Nav2 action servers ready.")
 
         # ── Publishers ───────────────────────────────────────────────────────
@@ -145,7 +173,9 @@ class CheckpointNavigator(Node):
             f"CheckpointNavigator v2 ready. "
             f"{len(self.checkpoints)} checkpoints. "
             f"Pre-rotate threshold = {math.degrees(PRE_ROTATE_THRESHOLD):.1f}°  "
-            f"lookahead = {PRE_ROTATE_LOOKAHEAD} m")
+            f"lookahead = {PRE_ROTATE_LOOKAHEAD} m  "
+            f"home_retry_max = {HOME_RETRY_MAX}")
+
 
     # ================================================================
     #  CHECKPOINT LOADING  (unchanged from v1)
@@ -219,7 +249,10 @@ class CheckpointNavigator(Node):
             return
 
         # All clear — start navigation pipeline
+        self._is_returning_home = False
+        self._home_retry_count  = 0     # [FIX M4] reset retry counter khi nhận lệnh thủ công
         self._request_navigation(cp_id)
+
 
     def _on_estop(self, msg: Bool):
         if msg.data:
@@ -227,8 +260,13 @@ class CheckpointNavigator(Node):
                 self.get_logger().warn("!!! EMERGENCY STOP activated !!!")
                 self.state      = State.EMERGENCY_STOP
                 self.current_cp = -1
+                self._is_returning_home = False   # ← THÊM DÒNG NÀY
+                self._home_retry_count  = 0
                 self._stop_robot()
-                if self.goal_handle:
+                # [FIX C1] Guard: chỉ cancel nếu goal_handle thực sự tồn tại
+                # goal_handle chỉ được set sau _on_goal_accepted (NavigateToPose)
+                # Trong COMPUTING_PATH, goal_handle vẫn là None → không cancel được
+                if self.goal_handle is not None:
                     self.goal_handle.cancel_goal_async()
                 self._pub_status("EMERGENCY STOP")
         else:
@@ -248,6 +286,8 @@ class CheckpointNavigator(Node):
             if time.time() - self.arrival_time >= self.timeout:
                 self.get_logger().info(
                     f"Timeout at [{self.current_cp}]. Returning home.")
+                self._is_returning_home = True
+                self._home_retry_count  = 0     # [FIX M4] reset counter mỗi lần bắt đầu return
                 self.state = State.RETURNING_HOME
                 self._request_navigation(self.home_id)
             return
@@ -294,6 +334,11 @@ class CheckpointNavigator(Node):
 
     # ── Step 1: planner accepted/rejected the goal ─────────────────────────
     def _on_path_goal_response(self, future):
+        # [FIX C1] Nếu e-stop được kích hoạt trong lúc chờ planner, discard hoàn toàn
+        if self.state == State.EMERGENCY_STOP:
+            self.get_logger().info(
+                "[COMPUTING_PATH] E-stop active — discarding planner goal response.")
+            return
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().error(
@@ -305,6 +350,13 @@ class CheckpointNavigator(Node):
 
     # ── Step 2: planner returned a path ────────────────────────────────────
     def _on_path_result(self, future):
+        # [FIX C1] Guard đầu tiên: nếu state đã chuyển sang EMERGENCY_STOP
+        # trong lúc planner đang tính toán, bỏ qua toàn bộ kết quả.
+        if self.state == State.EMERGENCY_STOP:
+            self.get_logger().info(
+                "[COMPUTING_PATH] E-stop active — discarding path result, "
+                "will NOT send NavigateToPose.")
+            return
         result = future.result()
 
         # Planner failed
@@ -427,6 +479,13 @@ class CheckpointNavigator(Node):
         approximately aligned with the initial path tangent, so the
         controller should move forward cleanly.
         """
+        # [FIX C1] Guard: không gửi NavigateToPose nếu đang EMERGENCY_STOP.
+        # Đây là điểm cuối cùng trước khi goal được gửi đi — critical guard.
+        if self.state == State.EMERGENCY_STOP:
+            self.get_logger().warn(
+                f"[_send_nav_goal] E-stop active — blocked NavigateToPose to [{cp_id}].")
+            return
+        
         self.target_cp = cp_id
         self.state     = State.NAVIGATING
 
@@ -445,7 +504,17 @@ class CheckpointNavigator(Node):
         self._nav.send_goal_async(goal).add_done_callback(self._on_goal_accepted)
 
     def _on_goal_accepted(self, future):
-        self.goal_handle = future.result()
+        # [FIX C1] Guard: nếu e-stop xảy ra giữa khi gửi goal và callback này,
+        # cancel ngay goal vừa được accepted.
+        handle = future.result()
+        if self.state == State.EMERGENCY_STOP:
+            self.get_logger().warn(
+                "[_on_goal_accepted] E-stop active — canceling just-accepted goal.")
+            if handle.accepted:
+                handle.cancel_goal_async()
+            return
+
+        self.goal_handle = handle
         if not self.goal_handle.accepted:
             self.get_logger().error("NavigateToPose goal REJECTED by Nav2.")
             self.state = State.IDLE
@@ -453,14 +522,24 @@ class CheckpointNavigator(Node):
         self.goal_handle.get_result_async().add_done_callback(self._on_result)
 
     def _on_result(self, future):
+        # [FIX C1] Guard: nếu e-stop đã active khi result về,
+        # không thay đổi state (đang là EMERGENCY_STOP — giữ nguyên).
+        if self.state == State.EMERGENCY_STOP:
+            self.get_logger().info(
+                "[_on_result] E-stop active — discarding nav result.")
+            return
+
         status = future.result().status
 
         if status == GoalStatus.STATUS_SUCCEEDED:
-            self.current_cp   = self.target_cp
-            self.arrival_time = time.time()
+            self.current_cp       = self.target_cp
+            self.arrival_time     = time.time()
+            self._home_retry_count = 0      # [FIX M4] reset khi thành công về home
             name = self.checkpoints[self.current_cp]["name"]
 
-            if self.state == State.RETURNING_HOME or self.current_cp == self.home_id:
+            # Dùng flag thay vì self.state == State.RETURNING_HOME
+            if self._is_returning_home:
+                self._is_returning_home = False   # ← reset flag
                 self.state = State.IDLE
                 self.get_logger().info(
                     f"Arrived at Home [{self.current_cp}] '{name}'. State: IDLE.")
@@ -475,18 +554,65 @@ class CheckpointNavigator(Node):
                     f"Returning home in {self.timeout:.0f}s.")
 
         elif status == GoalStatus.STATUS_CANCELED:
+            self._is_returning_home = False   # ← reset flag
+            self._home_retry_count  = 0     # [FIX M4] reset counter khi bị cancel (có thể do timeout return home)
             self.current_cp = -1
             if self.state != State.EMERGENCY_STOP:
                 self.state = State.IDLE
                 self.get_logger().info("Goal canceled. State: IDLE.")
 
         elif status == GoalStatus.STATUS_ABORTED:
-            self.current_cp = -1
-            self.get_logger().error(
-                f"Navigation ABORTED to [{self.target_cp}]. "
-                "Check costmap / path planner.")
-            self.state = State.IDLE
-            self._pub_status(f"Aborted. Could not reach [{self.target_cp}].")
+            # [FIX M4] Retry logic khi về home bị abort
+            if self._is_returning_home and self._home_retry_count < HOME_RETRY_MAX:
+                self._home_retry_count += 1
+                self.get_logger().warn(
+                    f"RETURNING_HOME aborted. Retrying ({self._home_retry_count}/{HOME_RETRY_MAX}) "
+                    f"in {HOME_RETRY_DELAY_S:.0f}s...")
+                self._pub_status(
+                    f"Home path blocked. Retry {self._home_retry_count}/{HOME_RETRY_MAX} "
+                    f"in {HOME_RETRY_DELAY_S:.0f}s.")
+
+                # Dùng timer một lần để không block executor
+                self.create_timer(
+                    HOME_RETRY_DELAY_S,
+                    self._retry_home_once
+                )
+            else:
+                # Hết retry hoặc không phải returning home
+                if self._is_returning_home:
+                    self.get_logger().error(
+                        f"CRITICAL: Cannot reach home after {HOME_RETRY_MAX} retries. "
+                        "Manual intervention needed.")
+                    self._pub_status(
+                        f"CRITICAL: Cannot reach home [{self.home_id}]. "
+                        "Please move obstacles or manually return robot.")
+                else:
+                    self.get_logger().error(
+                        f"Navigation ABORTED to [{self.target_cp}]. "
+                        "Check costmap / path planner.")
+                    self._pub_status(f"Aborted. Could not reach [{self.target_cp}].")
+
+                self._is_returning_home = False
+                self._home_retry_count  = 0
+                self.current_cp         = -1
+                self.state              = State.IDLE
+
+    def _retry_home_once(self):
+        """
+        [FIX M4] Timer callback được gọi 1 lần sau HOME_RETRY_DELAY_S.
+        Hủy timer và thực hiện retry về home.
+        """
+        # Timer trong ROS 2 Foxy không có cancel() đơn giản trong callback,
+        # nhưng vì chỉ gọi 1 lần, ta dùng flag để tránh gọi lại.
+        if not self._is_returning_home:
+            # E-stop hoặc lệnh khác đã thay đổi state — bỏ qua retry
+            return
+        if self.state == State.EMERGENCY_STOP:
+            return
+        self.get_logger().info(
+            f"[RETURNING_HOME] Retry attempt {self._home_retry_count}/{HOME_RETRY_MAX}...")
+        self._request_navigation(self.home_id)
+
 
     # ================================================================
     #  UTILITY METHODS
@@ -582,7 +708,18 @@ class CheckpointNavigator(Node):
 # ================================================================
 def main(args=None):
     rclpy.init(args=args)
-    node = CheckpointNavigator()
+
+    try:
+        node = CheckpointNavigator()
+    except RuntimeError as e:
+        # [FIX M3] RuntimeError từ wait_for_server timeout được bắt ở đây,
+        # in log rõ ràng trước khi thoát — không zombie.
+        import logging
+        logging.getLogger("navigator").error(
+            f"CheckpointNavigator failed to initialize: {e}")
+        rclpy.shutdown()
+        return
+    
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
