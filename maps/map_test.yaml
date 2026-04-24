@@ -1,0 +1,22 @@
+# map_test.yaml — Nav2 Map Server metadata for corridor test map
+# Room: 15.0m wide (x) × 30.0m long (y)
+#
+# Corridors (centered on room width, 1m deep, 2m apart):
+#   y = 5–6m   gap = 1.00m
+#   y = 8–9m   gap = 0.90m
+#   y = 11–12m gap = 0.85m
+#   y = 14–15m gap = 0.80m
+#
+# Robot spawn (map frame):   x = 7.5 m,  y = 1.5 m,  yaw = 0
+# Test nav goal (map frame): x = 7.5 m,  y = 25.0 m
+#
+# Usage:
+#   Update nav2_params.yaml → map_server → yaml_filename to point to this file.
+#   AMCL initial pose: set via RViz "2D Pose Estimate" at (7.5, 1.5, 0).
+
+image: map_test.pgm
+resolution: 0.05
+origin: [-0.10, -0.10, 0.0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.25
