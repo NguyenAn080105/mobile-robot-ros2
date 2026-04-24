@@ -13,10 +13,10 @@ def generate_launch_description():
 
     default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot_v2.urdf.xacro')
     default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room.world')
-    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'nav_config.rviz')
+    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'nav_fusion_config.rviz')
     nav2_params         = os.path.join(pkg_share, 'config', 'nav2_params_v2.yaml')
     map_file            = os.path.join(pkg_share, 'maps', 'sim_map.yaml')
-    checkpoint_file     = os.path.join(pkg_share, 'config', 'checkpoints.yaml')
+    checkpoint_file     = os.path.join(pkg_share, 'config', 'checkpoints_v2.yaml')
 
     use_sim_time = LaunchConfiguration('use_sim_time')
     timeout      = LaunchConfiguration('timeout_at_checkpoint')
@@ -24,7 +24,7 @@ def generate_launch_description():
     # ====================== SIMULATION BRINGUP ======================
     spawn_sim_robot = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_share, 'launch', 'spawn_sim_robot.launch.py')
+            os.path.join(pkg_share, 'launch', 'spawn_sim_robot_v2.launch.py')
         ),
         launch_arguments={
             'use_sim_time': use_sim_time,
@@ -58,7 +58,7 @@ def generate_launch_description():
     # ====================== CHECKPOINT NAVIGATOR ======================
     navigator_node = Node(
         package='mobile_robot',
-        executable='navigator.py',
+        executable='navigator_v2.py',
         name='navigator',
         output='screen',
         parameters=[{

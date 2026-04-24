@@ -1,0 +1,67 @@
+checkpoints:
+- display_name: Home
+  id: 0
+  name: home
+  orientation:
+    w: 0.7085
+    x: 0.0
+    y: 0.0
+    z: -0.7057
+  position:
+    x: -3.988
+    y: -1.9888
+    z: 0.0
+
+- display_name: Library
+  id: 1
+  name: library
+  orientation:
+    w: 0.7096
+    x: 0.0
+    y: 0.0
+    z: 0.7046
+  position:
+    x: 4.0156
+    y: 1.9984
+    z: 0.0
+
+- display_name: Meeting Room
+  id: 2
+  name: meeting_room
+  orientation:
+    w: 0.0084
+    x: 0.0
+    y: 0.0
+    z: 1.0
+  position:
+    x: 12.0041
+    y: -0.6082
+    z: 0.0
+
+- display_name: Principal's Office
+  id: 3
+  name: principal_office
+  orientation:
+    w: 0.0352
+    x: 0.0
+    y: 0.0
+    z: 0.9994
+  position:
+    x: 12.0183
+    y: -0.6857
+    z: 0.0
+
+- display_name: Student Affairs
+  id: 4
+  name: student_affairs
+  orientation:
+    w: 0.7117
+    x: 0.0
+    y: 0.0
+    z: 0.7025
+  position:
+    x: 5.9559
+    y: 1.8607
+    z: 0.0
+
+frame_id: map
