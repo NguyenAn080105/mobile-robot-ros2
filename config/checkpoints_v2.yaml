@@ -3,65 +3,65 @@ checkpoints:
   id: 0
   name: home
   orientation:
-    w: 0.7085
+    w: 0.0
     x: 0.0
     y: 0.0
-    z: -0.7057
+    z: 0.0
   position:
-    x: -3.988
-    y: -1.9888
+    x: 0.0
+    y: 0.0
     z: 0.0
 
 - display_name: Library
   id: 1
   name: library
   orientation:
-    w: 0.7096
+    w: 0.7540335023788756
     x: 0.0
     y: 0.0
-    z: 0.7046
+    z: -0.6568359591939575
   position:
-    x: 4.0156
-    y: 1.9984
+    x: 3.978058523657705
+    y: 1.5835639804201134
     z: 0.0
 
 - display_name: Meeting Room
   id: 2
   name: meeting_room
   orientation:
-    w: 0.0084
+    w: 0.7045540723197874
     x: 0.0
     y: 0.0
-    z: 1.0
+    z: 0.7096503076710414
   position:
-    x: 12.0041
-    y: -0.6082
+    x: 4.00250104559148
+    y: -1.614508478030708
     z: 0.0
 
 - display_name: Principal's Office
   id: 3
   name: principal_office
   orientation:
-    w: 0.0352
+    w: 0.9999215340572314
     x: 0.0
     y: 0.0
-    z: 0.9994
+    z: -0.012526999985356842
   position:
-    x: 12.0183
-    y: -0.6857
+    x: -4.060560284215512
+    y: 1.5039295694320178
     z: 0.0
 
 - display_name: Student Affairs
   id: 4
   name: student_affairs
   orientation:
-    w: 0.7117
+    w: 0.9997409999620007
     x: 0.0
     y: 0.0
-    z: 0.7025
+    z: 0.02275814129007083
   position:
-    x: 5.9559
-    y: 1.8607
+    x: -4.067470992677994
+    y: -1.5798192900271686
     z: 0.0
 
 frame_id: map

@@ -2,7 +2,7 @@
 amcl:
   ros__parameters:
     use_sim_time: True
-    set_initial_pose: True
+    set_initial_pose: false
     # ----- Map: sim_map.yaml - sim_room.world
     initial_pose_x: 0.0
     initial_pose_y: 0.0
