@@ -8,18 +8,10 @@ scan_to_scan_filter_chain:
       params:
         box_frame: base_footprint
         invert: false
-        # Ver  1
-        # min_x: -0.12
-        # max_x: 0.32
-        # min_y: -0.20
-        # max_y: 0.20
-        # min_z: -0.05
-        # max_z: 1.40
-        # Ver 2
-        min_x: -0.14
-        max_x: 0.34
-        min_y: -0.24
-        max_y: 0.24
+        min_x: -0.13
+        max_x: 0.33
+        min_y: -0.31
+        max_y: 0.31
         min_z: -0.05
         max_z: 1.40
 
@@ -35,7 +27,23 @@ scan_to_scan_filter_chain:
         # RẤT QUAN TRỌNG: Xử lý các tia ngoài viền
         lower_replacement_value: -.inf     # Các tia < 6cm sẽ bị gán thành -vô cùng (bỏ qua)
         upper_replacement_value: .inf      # Các tia > 15m sẽ bị gán thành +vô cùng (Nav2 hiểu là không gian trống, không phải vật cản)
+    # Phần 2: XÓA 60° → 70°
+    filter3:
+      name: remove_60_to_70
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+        lower_angle:  1.68806   # 96.7°
+        upper_angle:  1.88495   # 107.9°
+        invert: false          # XÓA vùng nằm TRONG khoảng này
 
+# Phần 4: XÓA 290° → 300° (= -70° → -60°)
+    filter4:
+      name: remove_290_to_300
+      type: laser_filters/LaserScanAngularBoundsFilterInPlace
+      params:
+       lower_angle:   -1.98495 #  
+       upper_angle:  -1.75806 # 
+       invert: false          # XÓA vùng nằm TRONG khoảng này
     # Cấu hình đồng bộ TF
     tf_message_filter_target_frame: base_footprint
     tf_message_filter_queue_size: 20
