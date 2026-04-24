@@ -38,6 +38,9 @@ install(
     scripts/frontier_explorer.py
     scripts/map_saver_service.py
     scripts/ultrasonic_fusion_node.py
+    scripts/ultrasonic_fusion_node_v2.py
+    scripts/ultrasonic_fusion_node_v3.py
+    scripts/endurance_test.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

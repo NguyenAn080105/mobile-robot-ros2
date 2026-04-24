@@ -1,0 +1,299 @@
+<?xml version="1.0"?>
+<!--
+  map_test.world — Corridor Test World for Mobile Robot (Gazebo 11)
+  ════════════════════════════════════════════════════════════════════
+  Room    : 15.0m wide (x) × 30.0m long (y), walls 0.1m thick, 2.5m tall
+  Corridors (all centered at x=7.5m, 1m deep, 2m apart):
+      Corridor 1  y=5–6m    gap=1.00m
+      Corridor 2  y=8–9m    gap=0.90m
+      Corridor 3  y=11–12m   gap=0.85m
+      Corridor 4  y=14–15m  gap=0.80m
+
+  Robot spawn : x=7.5  y=1.5  z≈0.08  yaw=0  (Gazebo pose)
+  Test goal   : x=7.5  y=25.0  (set via RViz 2D Nav Goal)
+
+  Robot footprint: 0.44m × 0.60m (L×W)
+  Narrowest corridor: 0.80m → clearance per side: 0.10m
+
+  Note on Nav2 parameters (nav2_params.yaml):
+    inflation_radius = 0.35m → effective corridor width shrinks by 0.70m.
+    For tight corridor tests, temporarily reduce inflation_radius to 0.15–0.20m.
+
+  Simulation Usage:
+    1. Copy to: <pkg>/worlds/map_test.world
+    2. Include in gazebo launch:
+         world:=$(ros2 pkg prefix mobile_robot)/share/mobile_robot/worlds/map_test.world
+    3. Spawn robot at: x=7.5 y=1.5 z=0.09 R=0 P=0 Y=0
+-->
+<sdf version="1.6">
+  <world name="corridor_test">
+
+    <!-- Standard ground plane and lighting -->
+    <include><uri>model://ground_plane</uri></include>
+    <include><uri>model://sun</uri></include>
+
+    <!-- Physics: 1kHz, real-time -->
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <real_time_factor>1.0</real_time_factor>
+      <gravity>0 0 -9.81</gravity>
+    </physics>
+
+    <!-- ══════════════════════════════════════════════════════
+         OUTER ROOM WALLS  (thickness=0.1m, height=2.5m)
+    ══════════════════════════════════════════════════════ -->
+    <model name="wall_S">
+      <static>true</static>
+      <pose>7.5000 -0.0500 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>15.2000 0.1000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>15.2000 0.1000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/DarkGrey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_N">
+      <static>true</static>
+      <pose>7.5000 30.0500 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>15.2000 0.1000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>15.2000 0.1000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/DarkGrey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_W">
+      <static>true</static>
+      <pose>-0.0500 15.0000 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>0.1000 30.0000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>0.1000 30.0000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/DarkGrey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_E">
+      <static>true</static>
+      <pose>15.0500 15.0000 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>0.1000 30.0000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>0.1000 30.0000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/DarkGrey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════════════════════════════════════════════
+         CORRIDOR BARRIERS
+      Corridor 1: y=[5..6]m   gap=1.00m  wing_w=7.000m  
+      Corridor 2: y=[8..9]m   gap=0.90m  wing_w=7.050m  
+      Corridor 3: y=[11..12]m gap=0.85m  wing_w=7.075m  
+      Corridor 4: y=[14..15]m gap=0.80m  wing_w=7.100m  
+    ══════════════════════════════════════════════════════ -->
+    <model name="corr1_L">
+      <static>true</static>
+      <pose>3.5000 5.5000 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>7.0000 1.0000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>7.0000 1.0000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="corr1_R">
+      <static>true</static>
+      <pose>11.5000 5.5000 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>7.0000 1.0000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>7.0000 1.0000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="corr2_L">
+      <static>true</static>
+      <pose>3.5250 8.5000 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>7.0500 1.0000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>7.0500 1.0000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="corr2_R">
+      <static>true</static>
+      <pose>11.4750 8.5000 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>7.0500 1.0000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>7.0500 1.0000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="corr3_L">
+      <static>true</static>
+      <pose>3.5375 11.5000 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>7.0750 1.0000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>7.0750 1.0000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="corr3_R">
+      <static>true</static>
+      <pose>11.4625 11.5000 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>7.0750 1.0000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>7.0750 1.0000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="corr4_L">
+      <static>true</static>
+      <pose>3.5500 14.5000 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>7.1000 1.0000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>7.1000 1.0000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="corr4_R">
+      <static>true</static>
+      <pose>11.4500 14.5000 1.2500 0 0 0</pose>
+      <link name="link">
+        <collision name="col">
+          <geometry><box><size>7.1000 1.0000 2.5000</size></box></geometry>
+        </collision>
+        <visual name="vis">
+          <geometry><box><size>7.1000 1.0000 2.5000</size></box></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Robot spawn point indicator (green disc) -->
+    <model name="spawn_marker">
+      <static>true</static>
+      <pose>7.50 1.50 0.005 0 0 0</pose>
+      <link name="link">
+        <visual name="vis">
+          <geometry><cylinder><radius>0.15</radius><length>0.01</length></cylinder></geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Green</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

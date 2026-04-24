@@ -1,50 +1,67 @@
 #!/usr/bin/env python3
 """
-ultrasonic_fusion_node.py — v2
+ultrasonic_fusion_node.py — v3
 
-Thay đổi so với v1:
-  1. Safety: cancel Nav2 goal thay vì chèn Twist(0) (tránh race condition với controller_server)
-  2. Tăng ngưỡng phát hiện: 0.6m thay vì 0.35m cho phép robot lớn có đủ thời gian replan
-  3. Fix khoảng cách: compensate góc pitch của từng sensor (cos projection)
-  4. Thêm us_top_left/right vào LaserScan (projected xuống mặt phẳng ngang)
+Thay đổi so với v2:
+  1. us_top/us_bot: so sánh với baseline floor distance thay vì threshold tuyệt đối
+     - Ngắn hơn baseline - margin → vật cản trên sàn → obstacle
+     - Dài hơn baseline + margin → drop/hố → danger
+  2. us_mid: giữ nguyên logic phát hiện vật cản phía trước (ngóc lên 15°)
+  3. Fix SENSOR_PITCH cho đúng với URDF thực tế
 """
 
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionClient
 from sensor_msgs.msg import Range, LaserScan
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 from geometry_msgs.msg import Twist
-from nav2_msgs.action import NavigateToPose
 import math
 import numpy as np
 from collections import deque
+from typing import Tuple
 
 
-# ── Góc pitch thực tế từ URDF (rpy="0 pitch 0") ───────────────────────────
-# us_top: rpy="0 0.4363 0"  → pitch = +25°  (ngóc lên → chiếu xuống ngang: *cos(25°))
-# us_mid: rpy="0 -0.2618 0" → pitch = -15°  (chúc xuống → chiếu ra ngang: *cos(15°))
-# us_bot: rpy="0 0.2618 0"  → pitch = +15°  (hướng xuống sàn, không dùng cho scan)
+# ── Góc pitch thực tế từ URDF ──────────────────────────────────────────────
+# Pitch dương (+rpy_y) = trục X chúi XUỐNG (right-hand rule quanh Y)
+# us_top:  rpy="0 +0.2618 0" → +15° → chúi xuống
+# us_mid:  rpy="0 -0.2618 0" → -15° → ngóc lên
+# us_bot:  rpy="0 +0.2618 0" → +15° → chúi xuống
 SENSOR_PITCH = {
-    'us_top_left':   math.radians(25.0),
-    'us_top_right':  math.radians(25.0),
-    'us_mid_left':   math.radians(-15.0),
-    'us_mid_right':  math.radians(-15.0),
-    'us_bot_left':   math.radians(15.0),
-    'us_bot_right':  math.radians(15.0),
+    'us_top_left':   math.radians(15.0),   # chúi xuống
+    'us_top_right':  math.radians(15.0),   # chúi xuống
+    'us_mid_left':   math.radians(-15.0),  # ngóc lên
+    'us_mid_right':  math.radians(-15.0),  # ngóc lên
+    'us_bot_left':   math.radians(15.0),   # chúi xuống
+    'us_bot_right':  math.radians(15.0),   # chúi xuống
 }
 
+# ── Baseline: khoảng cách sensor → sàn khi không có vật cản ────────────────
+# Tính bằng: z_sensor / sin(pitch_angle)
+WHEEL_RADIUS = 0.08255  # m — từ URDF
+
+# z_chassis là z của sensor joint so với chassis link
+Z_TOP = 0.49 + WHEEL_RADIUS   # = 0.5726m so với mặt đất
+Z_BOT = 0.03 + WHEEL_RADIUS   # = 0.1126m so với mặt đất
+
+PITCH_DEG = 15.0
+
+FLOOR_BASELINE = {
+    'us_top_left':  Z_TOP / math.sin(math.radians(PITCH_DEG)),  # 0.5726/sin(15°) ≈ 2.213m
+    'us_top_right': Z_TOP / math.sin(math.radians(PITCH_DEG)),  # ≈ 2.213m
+    'us_bot_left':  Z_BOT / math.sin(math.radians(PITCH_DEG)),  # 0.1126/sin(15°) ≈ 0.435m
+    'us_bot_right': Z_BOT / math.sin(math.radians(PITCH_DEG)),  # ≈ 0.435m
+}
 
 class UltrasonicFusionNode(Node):
 
     # ── Thông số an toàn ────────────────────────────────────────────────────
-    # Tăng ngưỡng vì robot lớn (chassis ~0.5m) cần phát hiện sớm để replan
-    OBSTACLE_THRESHOLD = 0.60   # m — tăng từ 0.35 lên 0.60 (detection margin)
-    DROP_FLOOR_DIST    = 0.32   # m — khoảng cách sensor → sàn bình thường
-    DROP_MARGIN        = 0.08   # m — tolerance
-    FILTER_WINDOW      = 5      # median filter
+    OBSTACLE_THRESHOLD = 0.60   # m — us_mid: phát hiện vật cản phía trước
+    
+    # us_top/bot: margin so với baseline
+    FLOOR_OBSTACLE_MARGIN = 0.25  # m — ngắn hơn baseline X m → vật cản trên sàn
+    DROP_MARGIN           = 0.15  # m — dài hơn baseline X m → drop/hố
 
-    # Thời gian cooldown (s) sau khi cancel goal, tránh spam cancel
+    FILTER_WINDOW      = 5
     CANCEL_COOLDOWN    = 2.0
 
     def __init__(self):
@@ -58,26 +75,22 @@ class UltrasonicFusionNode(Node):
         self.buffers = {n: deque(maxlen=self.FILTER_WINDOW) for n in self.sensor_names}
         self.latest  = {n: float('inf') for n in self.sensor_names}
 
-        # ── Góc và pitch của từng sensor trong LaserScan ─────────────────────
-        # (angle_in_laserscan, pitch_angle_from_urdf)
-        # Top/Mid đều ở phía trước-trái và phía trước-phải nhưng lệch nhau
-        # Từ URDF: sensors nằm ở x=0.35, y=±0.17 → góc ~±26° so với trục X robot
-        # Ở đây dùng sensor theo 2 phía trái/phải chứ không phải thẳng trước
+        # ── Góc của từng sensor trong LaserScan ──────────────────────────────
+        # Chỉ us_mid và us_top đưa vào LaserScan (us_bot chỉ drop detection)
+        # us_top chiếu xuống sàn nên projected horizontal distance
+        # us_mid ngóc lên → phát hiện vật thể cao
         self.sensor_angles = {
-            # sensor_name: (góc trong LaserScan [rad], pitch [rad])
-            'us_top_left':  ( math.radians(26),   SENSOR_PITCH['us_top_left']),
-            'us_top_right': ( math.radians(-26),  SENSOR_PITCH['us_top_right']),
-            'us_mid_left':  ( math.radians(26),   SENSOR_PITCH['us_mid_left']),
-            'us_mid_right': ( math.radians(-26),  SENSOR_PITCH['us_mid_right']),
+            'us_top_left':  ( math.radians(26),  SENSOR_PITCH['us_top_left']),
+            'us_top_right': ( math.radians(-26), SENSOR_PITCH['us_top_right']),
+            'us_mid_left':  ( math.radians(26),  SENSOR_PITCH['us_mid_left']),
+            'us_mid_right': ( math.radians(-26), SENSOR_PITCH['us_mid_right']),
         }
 
-        # ── Nav2 action client để cancel goal khi danger ─────────────────────
-        self._nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
-        self._current_goal_handle = None
         self._last_cancel_time = 0.0
-        self._danger_prev = False
+        self._danger_prev      = False
+        self._robot_navigating = False
 
-        # ── Subscribers: 6 Range topics ─────────────────────────────────────
+        # ── Subscribers ──────────────────────────────────────────────────────
         for name in self.sensor_names:
             self.create_subscription(
                 Range,
@@ -86,63 +99,127 @@ class UltrasonicFusionNode(Node):
                 10
             )
 
-        # Goal handle subscriber — lắng nghe goal hiện tại của navigator
-        # navigator.py publish goal qua action, ta cần lấy handle để cancel
-        # Giải pháp đơn giản: subscribe /robot/state để biết khi nào đang navigate
-        self._robot_navigating = False
         self.create_subscription(
-            rclpy.impl.rcutils_logger.RcutilsLogger if False else __import__('std_msgs.msg', fromlist=['String']).String,
-            '/robot/state',
-            self._on_robot_state,
-            10
-        )
+            String, '/robot/state', self._on_robot_state, 10)
 
         # ── Publishers ───────────────────────────────────────────────────────
         self.scan_pub   = self.create_publisher(LaserScan, '/ultrasonic_scan', 10)
         self.safety_pub = self.create_publisher(Bool,      '/safety_stop',     10)
-        # Vẫn giữ cmd_vel relay làm backup cho trường hợp không dùng navigator.py
         self.cmdvel_pub = self.create_publisher(Twist,     '/cmd_vel',         10)
 
-        # ── Subscriber: relay cmd_vel (chỉ hoạt động nếu không dùng navigator.py)
         self.create_subscription(Twist, '/cmd_vel_nav', self._cmdvel_cb, 10)
-
-        # ── Timer 10 Hz ──────────────────────────────────────────────────────
         self.create_timer(0.1, self._publish_scan)
 
-        self.get_logger().info('ultrasonic_fusion_node v2 started ✓')
-        self.get_logger().info(
-            f'Thresholds — obstacle: {self.OBSTACLE_THRESHOLD}m | '
-            f'drop: >{self.DROP_FLOOR_DIST + self.DROP_MARGIN}m'
-        )
+        # Log baseline để verify
+        for name, baseline in FLOOR_BASELINE.items():
+            self.get_logger().info(
+                f'Baseline {name}: {baseline:.3f}m | '
+                f'obstacle if < {baseline - self.FLOOR_OBSTACLE_MARGIN:.3f}m | '
+                f'drop if > {baseline + self.DROP_MARGIN:.3f}m'
+            )
+
+        self.get_logger().info('ultrasonic_fusion_node v3 started ✓')
 
     def _on_robot_state(self, msg):
         self._robot_navigating = msg.data in ('NAVIGATING', 'RETURNING_HOME')
 
     # ────────────────────────────────────────────────────────────────────────
     def _range_cb(self, msg: Range, name: str):
-        """Lọc giá trị hợp lệ, áp median filter, compensate pitch."""
+        """Lưu raw range (không compensate pitch ở đây, xử lý tại điểm dùng)."""
         if msg.min_range <= msg.range <= msg.max_range:
-            pitch = abs(SENSOR_PITCH.get(name, 0.0))
-            # Khoảng cách ngang thực = range * cos(pitch)
-            horizontal_dist = msg.range * math.cos(pitch)
-            self.buffers[name].append(horizontal_dist)
+            self.buffers[name].append(msg.range)
+        # Nếu đọc max_range (không có vật cản trong tầm) → lưu inf
+        elif msg.range >= msg.max_range:
+            self.buffers[name].append(float('inf'))
+        
         if self.buffers[name]:
-            self.latest[name] = float(np.median(list(self.buffers[name])))
+            vals = [v for v in self.buffers[name] if v != float('inf')]
+            if vals:
+                self.latest[name] = float(np.median(vals))
+            else:
+                self.latest[name] = float('inf')
+
+    # ────────────────────────────────────────────────────────────────────────
+    def _is_floor_sensor_obstacle(self, name: str) -> Tuple[bool, str]:
+        """
+        Kiểm tra us_top/us_bot có phát hiện vật cản không.
+        
+        Returns: (is_danger, reason)
+        - range << baseline → vật cản trên sàn (có thứ gì đó chặn beam trước khi chạm đất)
+        - range >> baseline → drop/hố (beam đi xa hơn bình thường)
+        - range ≈ baseline → bình thường, bỏ qua
+        """
+        raw = self.latest[name]
+        if raw == float('inf'):
+            return False, ''
+        
+        baseline = FLOOR_BASELINE[name]
+        
+        # Vật cản trên sàn: beam bị chặn sớm hơn baseline
+        if raw < baseline - self.FLOOR_OBSTACLE_MARGIN:
+            return True, f'FLOOR_OBSTACLE — {name}: {raw:.3f}m (baseline={baseline:.3f}m)'
+        
+        # Drop/hố: beam đi xa hơn baseline
+        if raw > baseline + self.DROP_MARGIN:
+            return True, f'DROP — {name}: {raw:.3f}m (baseline={baseline:.3f}m)'
+        
+        return False, ''
+
+    # ────────────────────────────────────────────────────────────────────────
+    def _is_danger(self) -> bool:
+        # Kiểm tra us_bot (drop detection + floor obstacle, độ cao thấp)
+        for name in ['us_bot_left', 'us_bot_right']:
+            danger, reason = self._is_floor_sensor_obstacle(name)
+            if danger:
+                self.get_logger().warn(f'[SAFETY] {reason}', throttle_duration_sec=1.0)
+                return True
+
+        # Kiểm tra us_top (floor obstacle ở tầm cao hơn)
+        for name in ['us_top_left', 'us_top_right']:
+            danger, reason = self._is_floor_sensor_obstacle(name)
+            if danger:
+                self.get_logger().warn(f'[SAFETY] {reason}', throttle_duration_sec=1.0)
+                return True
+
+        # Kiểm tra us_mid (vật cản phía trước, tầm trung-cao)
+        for name in ['us_mid_left', 'us_mid_right']:
+            raw = self.latest[name]
+            if raw != float('inf') and raw < self.OBSTACLE_THRESHOLD:
+                self.get_logger().warn(
+                    f'[SAFETY] OBSTACLE — {name}: {raw:.3f}m',
+                    throttle_duration_sec=1.0)
+                return True
+
+        return False
 
     # ────────────────────────────────────────────────────────────────────────
     def _publish_scan(self):
         """
-        Convert sensors ngang → LaserScan 360°
-        Đã compensate góc pitch → khoảng cách đúng hơn.
+        Chỉ đưa us_mid vào LaserScan để costmap xử lý obstacle phía trước.
+        us_top đưa vào với điều kiện: chỉ khi phát hiện floor obstacle
+        (tức range < baseline - margin), không phải khi đọc baseline bình thường.
         """
         num_rays = 360
         ranges   = [float('inf')] * num_rays
-        spread   = 8  # ±8° cone width
+        spread   = 8
 
         for name, (angle_rad, pitch) in self.sensor_angles.items():
-            dist = self.latest[name]
-            if dist == float('inf'):
+            raw = self.latest[name]
+            if raw == float('inf'):
                 continue
+
+            # us_top: chỉ đưa vào scan khi có floor obstacle, không phải đọc sàn bình thường
+            if name in ('us_top_left', 'us_top_right'):
+                baseline = FLOOR_BASELINE[name]
+                if raw >= baseline - self.FLOOR_OBSTACLE_MARGIN:
+                    # Đọc bình thường (sàn) → bỏ qua, không đưa vào costmap
+                    continue
+                # Có vật cản → tính horizontal distance
+                dist = raw * math.cos(abs(pitch))
+            else:
+                # us_mid: compensate pitch để lấy horizontal distance
+                dist = raw * math.cos(abs(pitch))
+
             center_idx = int(round(math.degrees(angle_rad))) % num_rays
             for offset in range(-spread, spread + 1):
                 idx = (center_idx + offset) % num_rays
@@ -158,71 +235,38 @@ class UltrasonicFusionNode(Node):
         scan.angle_increment = 2 * math.pi / num_rays
         scan.time_increment  = 0.0
         scan.scan_time       = 0.1
-        scan.range_min       = 0.02
-        scan.range_max       = 4.0
+        scan.range_min       = 0.01
+        scan.range_max       = 2.5
         scan.ranges          = ranges
 
         self.scan_pub.publish(scan)
 
-        # Safety check & cancel Nav2 goal nếu cần
         danger = self._is_danger()
         self.safety_pub.publish(Bool(data=danger))
 
         if danger and not self._danger_prev:
-            # Edge: mới chuyển sang danger → cancel goal
             self._try_cancel_goal()
         self._danger_prev = danger
 
     # ────────────────────────────────────────────────────────────────────────
     def _try_cancel_goal(self):
-        """Cancel Nav2 goal hiện tại. Dùng cooldown tránh spam."""
         now = self.get_clock().now().nanoseconds / 1e9
         if now - self._last_cancel_time < self.CANCEL_COOLDOWN:
             return
         self._last_cancel_time = now
 
-        # Cách 1: Dùng action client cancel all goals
-        if self._nav_client.server_is_ready():
-            self.get_logger().warn('[SAFETY] Cancelling Nav2 goal due to obstacle/drop detection')
-            # cancel_all_goals_async() cancel tất cả goal đang pending
-            self._nav_client._cancel_goal(None)  # fallback nếu không có handle
-
-        # Cách 2 (reliable hơn): publish emergency stop lên navigator topic
-        # để navigator tự cancel goal qua _on_estop
-        from std_msgs.msg import Bool as BoolMsg
         if not hasattr(self, '_estop_pub'):
+            from std_msgs.msg import Bool as BoolMsg
             self._estop_pub = self.create_publisher(BoolMsg, '/robot/emergency_stop', 10)
+
+        from std_msgs.msg import Bool as BoolMsg
         msg = BoolMsg()
         msg.data = True
         self._estop_pub.publish(msg)
-        self.get_logger().warn('[SAFETY] Published emergency_stop=True to navigator')
-
-    # ────────────────────────────────────────────────────────────────────────
-    def _is_danger(self) -> bool:
-        """Kiểm tra tất cả sensors với ngưỡng đã nâng lên."""
-        drop_threshold = self.DROP_FLOOR_DIST + self.DROP_MARGIN
-
-        for name in ['us_bot_left', 'us_bot_right']:
-            if self.latest[name] > drop_threshold:
-                self.get_logger().warn(
-                    f'[SAFETY] DROP — {name}: {self.latest[name]:.3f}m',
-                    throttle_duration_sec=1.0
-                )
-                return True
-
-        for name in ['us_top_left', 'us_top_right', 'us_mid_left', 'us_mid_right']:
-            if self.latest[name] < self.OBSTACLE_THRESHOLD:
-                self.get_logger().warn(
-                    f'[SAFETY] OBSTACLE — {name}: {self.latest[name]:.3f}m',
-                    throttle_duration_sec=1.0
-                )
-                return True
-
-        return False
+        self.get_logger().warn('[SAFETY] Published emergency_stop=True')
 
     # ────────────────────────────────────────────────────────────────────────
     def _cmdvel_cb(self, msg: Twist):
-        """Backup relay: chỉ dùng khi không có navigator.py."""
         if self._is_danger():
             self.cmdvel_pub.publish(Twist())
         else:
