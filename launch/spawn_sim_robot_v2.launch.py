@@ -15,7 +15,7 @@ def generate_launch_description():
     # ====================== PATH ======================
     default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot_v2.urdf.xacro')
     default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room.world')
-    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'nav_fusion_config.rviz')
+    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'nav_config.rviz')
     ekf_config_path     = os.path.join(pkg_share, 'config', 'ekf.yaml')
     filter_config       = os.path.join(pkg_share, 'config', 'laser_filter.yaml')
 

@@ -33,7 +33,7 @@ CHECKPOINTS = {}
 def load_checkpoints():
     try:
         pkg  = get_package_share_directory("mobile_robot")
-        path = os.path.join(pkg, "config", "checkpoints.yaml")
+        path = os.path.join(pkg, "config", "checkpoints_v2.yaml")
         with open(path, "r") as f:
             data = yaml.safe_load(f)
         for cp in data.get("checkpoints", []):
