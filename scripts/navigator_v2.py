@@ -1,22 +1,40 @@
 #!/usr/bin/env python3
 """
-navigator.py  ── v2  (Pre-Rotate Edition)
+navigator_v2.py
 ==========================================
-Thêm 2 trạng thái mới vào state machine:
-  COMPUTING_PATH → PRE_ROTATING → NAVIGATING
+Thiết kế lại state machine với 4 lệnh điều khiển rõ ràng hơn v2:
 
-Luồng mới:
-  1. Khi nhận lệnh navigate, gọi ComputePathToPose action để lấy global path.
-  2. Trích heading tiếp tuyến đoạn đầu path tại lookahead ≈ 0.5m.
-  3. Nếu |heading_error| > 0.40 rad (~23°) → xoay tại chỗ bằng cmd_vel trực tiếp.
-  4. Khi căn hướng xong (hoặc timeout) → gửi NavigateToPose như bình thường.
+    go <id>   → Điều hướng đến checkpoint
+    stop      → Dừng ngay tại chỗ (có thể tiếp tục sau)
+    continue  → Tiếp tục hành trình bị dừng
+    reset     → Hủy hành trình, chờ 30s rồi tự về Home
 
-Fallback: Nếu planner thất bại / path quá ngắn → bỏ qua pre-rotate,
-          điều hướng thẳng (hành vi giống v1).
+Luồng chính:
+  IDLE ──go──► COMPUTING_PATH ──► PRE_ROTATING ──► NAVIGATING
+                                                        │
+                                            succeeded ──┘─► IDLE
+                                            stop     ──────► STOPPED
+                                                               │
+                                                    continue ──┤─► COMPUTING_PATH
+                                                    reset    ──┘─► WAITING_RESET
+                                                                        │
+                                                            go ─────────┤─► COMPUTING_PATH
+                                                            30s timeout ──► RETURNING_HOME
 
-Topics mới:
-  pub: /cmd_vel (Twist) — chỉ trong trạng thái PRE_ROTATING
-  (các topic khác giữ nguyên từ v1)
+Thay đổi so với v2:
+  - EMERGENCY_STOP → STOPPED (có thể resume)
+  - AT_CHECKPOINT bị xóa → sau khi đến CP thì về IDLE ngay
+  - Thêm WAITING_RESET (30s chờ sau reset)
+  - Dùng 1 topic /robot/command (String) thay vì nhiều topic
+  - _stop_requested flag: chặn _send_nav_goal khi stop xảy ra trong COMPUTING_PATH
+  - _intentional_cancel flag: phân biệt cancel chủ ý vs Nav2-triggered
+
+Topics:
+  Sub: /robot/command  (std_msgs/String) — "go:1" | "stop" | "continue" | "reset"
+  Pub: /robot/state    (std_msgs/String)
+  Pub: /robot/current_checkpoint (std_msgs/Int32)
+  Pub: /robot/status_message     (std_msgs/String)
+  Pub: /cmd_vel        (geometry_msgs/Twist) — chỉ trong PRE_ROTATING
 """
 
 import math
@@ -38,65 +56,72 @@ from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped, Twist
 from nav2_msgs.action import ComputePathToPose, NavigateToPose
 from nav_msgs.msg import Path
-from std_msgs.msg import Bool, Int32, String
+from std_msgs.msg import Int32, String
 
 
 # ============================================================
-#  TUNING PARAMETERS  — chỉnh ở đây, không cần sửa code bên dưới
+#  TUNING PARAMETERS
 # ============================================================
 
-# Ngưỡng góc lệch để kích hoạt pre-rotate (rad).
-# < ngưỡng này → bỏ qua, điều hướng thẳng.
-PRE_ROTATE_THRESHOLD = 0.40     # rad  (~23°)
+# Pre-rotate
+PRE_ROTATE_THRESHOLD = 0.40     # rad (~23°) — ngưỡng kích hoạt pre-rotate
+PRE_ROTATE_STOP_THR  = 0.05     # rad (~3°)  — ngưỡng coi là đã căn xong
+PRE_ROTATE_LOOKAHEAD = 0.50     # m   — lookahead trên path để tính heading ban đầu
+PRE_ROTATE_KP        = 1.5      # P-gain bộ điều khiển xoay tại chỗ
+PRE_ROTATE_MAX_W     = 0.80     # rad/s — tốc độ góc tối đa
+PRE_ROTATE_MIN_W     = 0.15     # rad/s — tốc độ góc tối thiểu (thắng ma sát tĩnh)
+PRE_ROTATE_TIMEOUT   = 12.0     # s  — timeout pre-rotate
 
-# Sai số góc coi là "đã căn xong" (rad).
-PRE_ROTATE_STOP_THR  = 0.05    # rad  (~3°)
+# Home retry khi RETURNING_HOME bị abort
+HOME_RETRY_MAX       = 3        # lần retry tối đa
+HOME_RETRY_DELAY_S   = 5.0      # s chờ giữa các lần retry
 
-# Khoảng cách lookahead trên path để tính heading tiếp tuyến ban đầu (m).
-PRE_ROTATE_LOOKAHEAD = 0.50    # m
+# Timeout chờ Nav2 action servers
+NAV2_SERVER_TIMEOUT_S = 30.0    # s
 
-# P gain cho bộ điều khiển xoay tại chỗ.
-PRE_ROTATE_KP        = 1.5
-
-# Vận tốc góc tối đa khi xoay tại chỗ (rad/s).
-PRE_ROTATE_MAX_W     = 0.80    # rad/s
-
-# Vận tốc góc tối thiểu khi xoay (để thắng ma sát tĩnh) (rad/s).
-PRE_ROTATE_MIN_W     = 0.15    # rad/s
-
-# Timeout cho pre-rotate — sau thời gian này dù chưa căn xong vẫn tiến tới nav (s).
-PRE_ROTATE_TIMEOUT   = 12.0    # s
-
-# [FIX M4] Cấu hình retry về home khi navigation bị abort
-HOME_RETRY_MAX       = 3        # số lần retry tối đa
-HOME_RETRY_DELAY_S   = 5.0     # giây chờ giữa các lần retry
-
-# [FIX M3] Timeout chờ Nav2 action servers sẵn sàng
-NAV2_SERVER_TIMEOUT_S = 30.0   # giây
+# Thời gian chờ ở WAITING_RESET trước khi tự về Home
+RESET_WAIT_TIMEOUT_S  = 30      # s (int — đếm bằng 1s tick)
 
 # ============================================================
 
 
 class State(Enum):
     IDLE           = "IDLE"
-    COMPUTING_PATH = "COMPUTING_PATH"   # ← NEW: chờ planner trả path
-    PRE_ROTATING   = "PRE_ROTATING"     # ← NEW: xoay tại chỗ về hướng ban đầu của path
+    COMPUTING_PATH = "COMPUTING_PATH"
+    PRE_ROTATING   = "PRE_ROTATING"
     NAVIGATING     = "NAVIGATING"
-    AT_CHECKPOINT  = "AT_CHECKPOINT"
-    EMERGENCY_STOP = "EMERGENCY_STOP"
+    STOPPED        = "STOPPED"          # ← Thay thế EMERGENCY_STOP + AT_CHECKPOINT
+    WAITING_RESET  = "WAITING_RESET"    # ← Mới: chờ 30s sau lệnh reset
     RETURNING_HOME = "RETURNING_HOME"
 
+
+# Các state mà robot "đang bận" → chặn lệnh go
+_BUSY_STATES = {
+    State.COMPUTING_PATH,
+    State.PRE_ROTATING,
+    State.NAVIGATING,
+    State.RETURNING_HOME,
+}
+
+# Các state mà lệnh go hợp lệ
+_GO_VALID_STATES = {State.IDLE, State.WAITING_RESET}
+
+# Các state mà lệnh stop hợp lệ
+_STOP_VALID_STATES = {State.COMPUTING_PATH, State.PRE_ROTATING, State.NAVIGATING}
+
+
 class CheckpointNavigator(Node):
+    """
+    Navigator v2: 4-command state machine với debug log đầy đủ.
+    """
 
     def __init__(self):
         super().__init__("checkpoint_navigator")
 
         # ── Parameters ──────────────────────────────────────────────────────
-        self.declare_parameter("checkpoint_file",       "")
-        self.declare_parameter("timeout_at_checkpoint", 30.0)
-        self.declare_parameter("home_checkpoint_id",    0)
+        self.declare_parameter("checkpoint_file",    "")
+        self.declare_parameter("home_checkpoint_id", 0)
 
-        self.timeout = self.get_parameter("timeout_at_checkpoint").value
         self.home_id = self.get_parameter("home_checkpoint_id").value
 
         self.checkpoints = self._load_checkpoints()
@@ -106,21 +131,29 @@ class CheckpointNavigator(Node):
 
         # ── State variables ──────────────────────────────────────────────────
         self.state        = State.IDLE
-        self.current_cp   = -1
-        self.target_cp    = None
-        self.goal_handle  = None
-        self.arrival_time = None
-        self._is_returning_home = False   
+        self.current_cp   = -1          # ID của CP đã đến gần nhất (thành công)
+        self.target_cp    = None        # ID CP đang hướng đến
+        self.goal_handle  = None        # NavigateToPose goal handle
 
-        # Pre-rotate specific
-        self._target_yaw       = 0.0     # desired heading (rad, map frame)
-        self._pre_rotate_start = None    # time.monotonic() when rotation began
-        self._pending_cp_id    = None    # checkpoint waiting for rotation to finish
+        # Pre-rotate
+        self._target_yaw       = 0.0
+        self._pre_rotate_start = None
+        self._pending_cp_id    = None
 
-        # [FIX M4] Retry counter cho return home
-        self._home_retry_count = 0
+        # Stop/continue/reset flags
+        self._stop_requested   = False  # Chặn _send_nav_goal khi stop trong COMPUTING_PATH
+        self._intentional_cancel = False # Phân biệt cancel chủ ý vs Nav2-triggered
+        self._saved_target_cp  = None   # CP được lưu khi stop, dùng cho continue
 
-        # ── TF (needed to get current robot yaw for pre-rotate) ──────────────
+        # Returning home
+        self._is_returning_home = False
+        self._home_retry_count  = 0
+
+        # WAITING_RESET timer state
+        self._reset_elapsed    = 0
+        self._reset_timer      = None   # timer handle
+
+        # ── TF ──────────────────────────────────────────────────────────────
         self._tf_buffer   = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
 
@@ -128,64 +161,53 @@ class CheckpointNavigator(Node):
         self._nav     = ActionClient(self, NavigateToPose,    "navigate_to_pose")
         self._planner = ActionClient(self, ComputePathToPose, "compute_path_to_pose")
 
-        # self.get_logger().info("Waiting for Nav2 action servers...")
-        # self._nav.wait_for_server()
-        # self._planner.wait_for_server()
-
-        # [FIX M3] wait_for_server với timeout — thay vì block vĩnh viễn
         self.get_logger().info(
             f"Waiting for Nav2 action servers (timeout={NAV2_SERVER_TIMEOUT_S:.0f}s)...")
-        nav_ready     = self._nav.wait_for_server(timeout_sec=NAV2_SERVER_TIMEOUT_S)
-        planner_ready = self._planner.wait_for_server(timeout_sec=NAV2_SERVER_TIMEOUT_S)
+        nav_ok     = self._nav.wait_for_server(timeout_sec=NAV2_SERVER_TIMEOUT_S)
+        planner_ok = self._planner.wait_for_server(timeout_sec=NAV2_SERVER_TIMEOUT_S)
 
-        if not nav_ready:
+        if not nav_ok:
             raise RuntimeError(
-                f"navigate_to_pose action server not available after "
-                f"{NAV2_SERVER_TIMEOUT_S:.0f}s. "
-                "Is Nav2 running? Check lifecycle manager logs.")
-        if not planner_ready:
+                f"navigate_to_pose not available after {NAV2_SERVER_TIMEOUT_S:.0f}s. "
+                "Is Nav2 running?")
+        if not planner_ok:
             raise RuntimeError(
-                f"compute_path_to_pose action server not available after "
-                f"{NAV2_SERVER_TIMEOUT_S:.0f}s. "
-                "Is planner_server running? Check Nav2 lifecycle logs.")
+                f"compute_path_to_pose not available after {NAV2_SERVER_TIMEOUT_S:.0f}s. "
+                "Is planner_server running?")
 
-        self.get_logger().info("Nav2 action servers ready.")
+        self.get_logger().info("Nav2 action servers ready ✓")
 
         # ── Publishers ───────────────────────────────────────────────────────
         self._state_pub  = self.create_publisher(String, "/robot/state",              10)
         self._cp_pub     = self.create_publisher(Int32,  "/robot/current_checkpoint", 10)
         self._status_pub = self.create_publisher(String, "/robot/status_message",     10)
-        # cmd_vel publisher — chỉ dùng trong PRE_ROTATING; Nav2 controller_server
-        # sẽ không cạnh tranh vì chưa nhận NavigateToPose goal lúc này.
         self._cmdvel_pub = self.create_publisher(Twist,  "/cmd_vel",                  10)
 
         # ── Subscribers ──────────────────────────────────────────────────────
-        self.create_subscription(
-            Int32, "/robot/navigate_to_checkpoint", self._on_nav_command, 10)
-        self.create_subscription(
-            Bool, "/robot/emergency_stop", self._on_estop, 10)
+        self.create_subscription(String, "/robot/command", self._on_command, 10)
 
         # ── Timers ───────────────────────────────────────────────────────────
-        self.create_timer(0.1, self._state_machine)   # 10 Hz — main loop + pre-rotate tick
-        self.create_timer(1.0, self._publish_state)   # 1 Hz  — state broadcast
+        self.create_timer(0.1, self._state_machine_tick)  # 10 Hz — pre-rotate loop
+        self.create_timer(1.0, self._publish_state)       # 1 Hz  — state broadcast
 
         self.get_logger().info(
-            f"CheckpointNavigator v2 ready. "
-            f"{len(self.checkpoints)} checkpoints. "
-            f"Pre-rotate threshold = {math.degrees(PRE_ROTATE_THRESHOLD):.1f}°  "
-            f"lookahead = {PRE_ROTATE_LOOKAHEAD} m  "
-            f"home_retry_max = {HOME_RETRY_MAX}")
+            f"CheckpointNavigator v2 ready │ "
+            f"{len(self.checkpoints)} checkpoints │ "
+            f"home_id={self.home_id} │ "
+            f"pre_rotate_thr={math.degrees(PRE_ROTATE_THRESHOLD):.0f}° │ "
+            f"reset_wait={RESET_WAIT_TIMEOUT_S}s"
+        )
 
+    # ════════════════════════════════════════════════════════
+    #  CHECKPOINT LOADING
+    # ════════════════════════════════════════════════════════
 
-    # ================================================================
-    #  CHECKPOINT LOADING  (unchanged from v1)
-    # ================================================================
     def _load_checkpoints(self) -> dict:
         path = self.get_parameter("checkpoint_file").value
         if not path or not os.path.exists(path):
             try:
                 pkg  = get_package_share_directory("mobile_robot")
-                path = os.path.join(pkg, "config", "checkpoints.yaml")
+                path = os.path.join(pkg, "config", "checkpoints_v2.yaml")
             except Exception:
                 self.get_logger().error("Package 'mobile_robot' not found.")
                 return {}
@@ -213,102 +235,290 @@ class CheckpointNavigator(Node):
                 "name": cp.get("display_name", cp["name"]),
                 "pose": pose,
             }
-        self.get_logger().info(f"Loaded {len(result)} checkpoints from {path}")
+        self.get_logger().info(
+            f"Loaded {len(result)} checkpoints from {path}")
         return result
 
-    # ================================================================
-    #  TOPIC CALLBACKS
-    # ================================================================
-    def _on_nav_command(self, msg: Int32):
-        cp_id = msg.data
+    # ════════════════════════════════════════════════════════
+    #  COMMAND DISPATCHER
+    # ════════════════════════════════════════════════════════
 
+    def _on_command(self, msg: String):
+        """
+        Nhận lệnh từ /robot/command.
+        Định dạng: "go:1" | "stop" | "continue" | "reset"
+        """
+        raw = msg.data.strip().lower()
+        self.get_logger().info(
+            f"[CMD] Received: '{raw}' │ Current state: {self.state.name}")
+
+        if raw.startswith("go:"):
+            self._cmd_go(raw)
+        elif raw == "stop":
+            self._cmd_stop()
+        elif raw == "continue":
+            self._cmd_continue()
+        elif raw == "reset":
+            self._cmd_reset()
+        else:
+            self.get_logger().warn(
+                f"[CMD] Unknown command: '{raw}'. "
+                "Valid: 'go:<id>', 'stop', 'continue', 'reset'")
+
+    # ════════════════════════════════════════════════════════
+    #  COMMAND: go
+    # ════════════════════════════════════════════════════════
+
+    def _cmd_go(self, raw: str):
+        """
+        go:<id> — Điều hướng đến checkpoint id.
+        Hợp lệ trong: IDLE, WAITING_RESET
+        """
+        # Parse ID
+        try:
+            cp_id = int(raw.split(":")[1])
+        except (IndexError, ValueError):
+            self.get_logger().error(
+                f"[GO] Invalid format '{raw}'. Expected 'go:<int>'")
+            return
+
+        # Validate checkpoint
         if cp_id not in self.checkpoints:
             self.get_logger().error(
-                f"Checkpoint {cp_id} not found. Valid IDs: {list(self.checkpoints.keys())}")
+                f"[GO] Checkpoint {cp_id} not found. "
+                f"Valid: {sorted(self.checkpoints.keys())}")
             return
 
-        # Block commands while robot is busy (includes new COMPUTING_PATH, PRE_ROTATING)
-        busy_states = (
-            State.NAVIGATING, State.RETURNING_HOME,
-            State.COMPUTING_PATH, State.PRE_ROTATING
-        )
-        if self.state in busy_states:
+        # Check state
+        if self.state in _BUSY_STATES:
             self.get_logger().warn(
-                f"Command rejected: busy in state '{self.state.name}' "
-                f"(navigating to [{self.target_cp}]).")
-            self._pub_status(f"Busy [{self.state.name}]. Ignored goal {cp_id}.")
+                f"[GO] Rejected: robot busy in {self.state.name} → "
+                f"navigating to [{self.target_cp}]. Use 'stop' first.")
+            self._pub_status(
+                f"Busy ({self.state.name}). Use 'stop' first.")
             return
 
-        if self.state == State.EMERGENCY_STOP:
+        if self.state == State.STOPPED:
             self.get_logger().warn(
-                "Emergency stop active. Publish False to /robot/emergency_stop first.")
+                "[GO] Rejected: robot is STOPPED. Use 'continue' or 'reset'.")
+            self._pub_status("Robot STOPPED. Use 'continue' or 'reset'.")
             return
 
-        if self.state in (State.IDLE, State.AT_CHECKPOINT) and self.current_cp == cp_id:
-            self.get_logger().info(f"Already at checkpoint [{cp_id}].")
+        if self.state not in _GO_VALID_STATES:
+            self.get_logger().warn(
+                f"[GO] Rejected: not valid in state {self.state.name}.")
             return
 
-        # All clear — start navigation pipeline
+        # WAITING_RESET → hủy timer 30s trước khi thực thi
+        if self.state == State.WAITING_RESET:
+            self._cancel_reset_timer()
+            self.get_logger().info(
+                f"[GO] Received during WAITING_RESET → canceling reset timer.")
+
+        # Nếu đã ở đúng CP và đang IDLE
+        if self.state == State.IDLE and self.current_cp == cp_id:
+            self.get_logger().info(
+                f"[GO] Already at checkpoint [{cp_id}] "
+                f"'{self.checkpoints[cp_id]['name']}'.")
+            return
+
+        self.get_logger().info(
+            f"[GO] ✓ Navigating to [{cp_id}] "
+            f"'{self.checkpoints[cp_id]['name']}'")
+
+        # Reset returning-home flags khi nhận lệnh go thủ công
         self._is_returning_home = False
-        self._home_retry_count  = 0     # [FIX M4] reset retry counter khi nhận lệnh thủ công
+        self._home_retry_count  = 0
+        self._stop_requested    = False
+
         self._request_navigation(cp_id)
 
+    # ════════════════════════════════════════════════════════
+    #  COMMAND: stop
+    # ════════════════════════════════════════════════════════
 
-    def _on_estop(self, msg: Bool):
-        if msg.data:
-            if self.state != State.EMERGENCY_STOP:
-                self.get_logger().warn("!!! EMERGENCY STOP activated !!!")
-                self.state      = State.EMERGENCY_STOP
-                self.current_cp = -1
-                self._is_returning_home = False   # ← THÊM DÒNG NÀY
-                self._home_retry_count  = 0
-                self._stop_robot()
-                # [FIX C1] Guard: chỉ cancel nếu goal_handle thực sự tồn tại
-                # goal_handle chỉ được set sau _on_goal_accepted (NavigateToPose)
-                # Trong COMPUTING_PATH, goal_handle vẫn là None → không cancel được
-                if self.goal_handle is not None:
-                    self.goal_handle.cancel_goal_async()
-                self._pub_status("EMERGENCY STOP")
-        else:
-            if self.state == State.EMERGENCY_STOP:
-                self.get_logger().info("Emergency stop reset → IDLE.")
-                self.state       = State.IDLE
-                self.goal_handle = None
-                self._pub_status("Ready.")
-
-    # ================================================================
-    #  STATE MACHINE  (10 Hz)
-    # ================================================================
-    def _state_machine(self):
-
-        # ── AT_CHECKPOINT: check timeout to return home ────────────────────
-        if self.state == State.AT_CHECKPOINT and self.arrival_time is not None:
-            if time.time() - self.arrival_time >= self.timeout:
-                self.get_logger().info(
-                    f"Timeout at [{self.current_cp}]. Returning home.")
-                self._is_returning_home = True
-                self._home_retry_count  = 0     # [FIX M4] reset counter mỗi lần bắt đầu return
-                self.state = State.RETURNING_HOME
-                self._request_navigation(self.home_id)
+    def _cmd_stop(self):
+        """
+        stop — Dừng ngay, lưu lại target để có thể continue.
+        Hợp lệ trong: COMPUTING_PATH, PRE_ROTATING, NAVIGATING
+        """
+        if self.state not in _STOP_VALID_STATES:
+            self.get_logger().warn(
+                f"[STOP] Rejected: not valid in state {self.state.name}. "
+                f"Valid states: {[s.name for s in _STOP_VALID_STATES]}")
             return
 
-        # ── PRE_ROTATING: P-controller tick ───────────────────────────────
+        # Lưu checkpoint đang nhắm tới
+        self._saved_target_cp = self.target_cp
+        saved_name = self.checkpoints.get(self._saved_target_cp, {}).get("name", "?")
+
+        self.get_logger().info(
+            f"[STOP] ✓ Stopping. Saving target=[{self._saved_target_cp}] "
+            f"'{saved_name}'")
+
+        # Đặt flag TRƯỚC KHI cancel — _on_result sẽ kiểm tra flag này
+        self._intentional_cancel = True
+
+        # Chặn _send_nav_goal nếu đang trong COMPUTING_PATH/PRE_ROTATING
+        self._stop_requested = True
+
+        # Dừng chuyển động ngay
+        self._stop_robot()
+
+        # Cancel Nav2 goal nếu đang NAVIGATING
+        if self.state == State.NAVIGATING and self.goal_handle is not None:
+            cancel_future = self.goal_handle.cancel_goal_async()
+            cancel_future.add_done_callback(self._on_cancel_done)
+            self.goal_handle = None
+            self.get_logger().info(
+                "[STOP] Nav2 goal cancel sent.")
+
+        self.state = State.STOPPED
+        self._pub_status(
+            f"STOPPED. Target [{self._saved_target_cp}] '{saved_name}' saved. "
+            "Use 'continue' or 'reset'.")
+
+    def _on_cancel_done(self, future):
+        """Callback sau khi Nav2 xác nhận đã cancel goal."""
+        try:
+            result = future.result()
+            self.get_logger().info(
+                f"[STOP] Nav2 cancel confirmed. Goals canceled: "
+                f"{len(result.goals_canceling)}")
+        except Exception as e:
+            self.get_logger().warn(f"[STOP] Cancel callback error: {e}")
+
+    # ════════════════════════════════════════════════════════
+    #  COMMAND: continue
+    # ════════════════════════════════════════════════════════
+
+    def _cmd_continue(self):
+        """
+        continue — Tiếp tục hành trình bị dừng.
+        Hợp lệ trong: STOPPED
+        Re-compute path (vì robot có thể đã bị di chuyển tay) → PRE_ROTATING.
+        """
+        if self.state != State.STOPPED:
+            self.get_logger().warn(
+                f"[CONTINUE] Rejected: only valid in STOPPED, "
+                f"current={self.state.name}")
+            return
+
+        if self._saved_target_cp is None:
+            self.get_logger().error(
+                "[CONTINUE] No saved target checkpoint. Use 'go:<id>' instead.")
+            return
+
+        cp_id = self._saved_target_cp
+        saved_name = self.checkpoints.get(cp_id, {}).get("name", "?")
+
+        self.get_logger().info(
+            f"[CONTINUE] ✓ Re-planning to [{cp_id}] '{saved_name}' "
+            "(full re-compute including pre-rotate)")
+
+        # Reset flags
+        self._stop_requested    = False
+        self._intentional_cancel = False
+        self._saved_target_cp   = None
+
+        self._pub_status(
+            f"Continuing to [{cp_id}] '{saved_name}'...")
+        self._request_navigation(cp_id)
+
+    # ════════════════════════════════════════════════════════
+    #  COMMAND: reset
+    # ════════════════════════════════════════════════════════
+
+    def _cmd_reset(self):
+        """
+        reset — Hủy hành trình, vào WAITING_RESET.
+        Hợp lệ trong: STOPPED
+        Sau 30s tự về Home; nếu nhận 'go:<id>' trong 30s → điều hướng đến id đó.
+        """
+        if self.state != State.STOPPED:
+            self.get_logger().warn(
+                f"[RESET] Rejected: only valid in STOPPED, "
+                f"current={self.state.name}")
+            return
+
+        self.get_logger().info(
+            f"[RESET] ✓ Entering WAITING_RESET. "
+            f"Will go home [{self.home_id}] in {RESET_WAIT_TIMEOUT_S}s "
+            "unless 'go:<id>' is received.")
+
+        # Xóa saved target
+        self._saved_target_cp   = None
+        self._stop_requested    = False
+        self._intentional_cancel = False
+
+        self.state = State.WAITING_RESET
+        self._pub_status(
+            f"WAITING_RESET: send 'go:<id>' within {RESET_WAIT_TIMEOUT_S}s, "
+            f"or robot will return home [{self.home_id}].")
+
+        # Khởi động one-shot timer 30s
+        self._start_reset_timer()
+
+    def _start_reset_timer(self):
+        """Khởi động bộ đếm ngược RESET_WAIT_TIMEOUT_S giây (pattern 1s tick)."""
+        self._reset_elapsed = 0
+        self._reset_timer   = self.create_timer(1.0, self._reset_tick)
+        self.get_logger().info(
+            f"[RESET_TIMER] Started. Countdown: {RESET_WAIT_TIMEOUT_S}s")
+
+    def _reset_tick(self):
+        """Tick 1s — đếm ngược. Khi hết giờ → về Home."""
+        # Nếu state đã thay đổi (nhận lệnh go), timer tự hủy
+        if self.state != State.WAITING_RESET:
+            self._reset_timer.cancel()
+            self._reset_timer = None
+            self.get_logger().info("[RESET_TIMER] Canceled (state changed).")
+            return
+
+        self._reset_elapsed += 1
+        remaining = RESET_WAIT_TIMEOUT_S - self._reset_elapsed
+
+        # Log mỗi 10s để không spam terminal
+        if remaining % 10 == 0 or remaining <= 5:
+            self.get_logger().info(
+                f"[RESET_TIMER] {remaining}s remaining before going home [{self.home_id}].")
+
+        if self._reset_elapsed >= RESET_WAIT_TIMEOUT_S:
+            self._reset_timer.cancel()
+            self._reset_timer = None
+            self.get_logger().info(
+                f"[RESET_TIMER] Timeout! Returning home [{self.home_id}].")
+            self._pub_status(
+                f"Reset timeout. Returning home [{self.home_id}]...")
+            self._is_returning_home = True
+            self._home_retry_count  = 0
+            self._request_navigation(self.home_id)
+
+    def _cancel_reset_timer(self):
+        """Hủy timer WAITING_RESET nếu đang chạy."""
+        if self._reset_timer is not None:
+            self._reset_timer.cancel()
+            self._reset_timer = None
+            self.get_logger().info(
+                "[RESET_TIMER] Canceled (new go command received).")
+
+    # ════════════════════════════════════════════════════════
+    #  STATE MACHINE TICK (10 Hz)
+    # ════════════════════════════════════════════════════════
+
+    def _state_machine_tick(self):
+        """Main 10 Hz loop — chỉ xử lý PRE_ROTATING tick."""
         if self.state == State.PRE_ROTATING:
             self._pre_rotate_tick()
 
-        # Other states (IDLE, NAVIGATING, COMPUTING_PATH, EMERGENCY_STOP,
-        # RETURNING_HOME) don't need active polling here.
+    # ════════════════════════════════════════════════════════
+    #  NAVIGATION PIPELINE
+    # ════════════════════════════════════════════════════════
 
-    # ================================================================
-    #  NAVIGATION ENTRY POINT
-    # ================================================================
     def _request_navigation(self, cp_id: int):
         """
-        Entry point for ALL navigation requests (both external commands and
-        internal timeout-triggered home return).
-
-        Instead of sending NavigateToPose immediately, we first ask the planner
-        for a path so we can extract the initial heading tangent.
+        Entry point cho mọi navigation request.
+        Bước 1: Gọi ComputePathToPose để lấy path → trích heading ban đầu.
         """
         self._pending_cp_id = cp_id
         self.target_cp      = cp_id
@@ -316,176 +526,172 @@ class CheckpointNavigator(Node):
 
         cp_name = self.checkpoints[cp_id]["name"]
         self.get_logger().info(
-            f"[COMPUTING_PATH] Requesting global path to [{cp_id}] {cp_name}...")
-        self._pub_status(f"Computing path to [{cp_id}] {cp_name}...")
+            f"[COMPUTING_PATH] → [{cp_id}] '{cp_name}' │ "
+            f"is_returning_home={self._is_returning_home}")
+        self._pub_status(f"Computing path to [{cp_id}] '{cp_name}'...")
 
-        goal_pose           = self.checkpoints[cp_id]["pose"]
+        goal_pose              = self.checkpoints[cp_id]["pose"]
         goal_pose.header.stamp = self.get_clock().now().to_msg()
 
         compute_goal            = ComputePathToPose.Goal()
         compute_goal.pose       = goal_pose
-        compute_goal.planner_id = ""   # "" → use default planner (NavFn / A*)
-        # NOTE: In Foxy, ComputePathToPose.Goal does NOT have a 'start' field
-        # (that was added in later Nav2 versions). The planner uses the
-        # current TF position of the robot automatically.
+        compute_goal.planner_id = ""  # dùng default planner (NavFn/A*)
 
         future = self._planner.send_goal_async(compute_goal)
         future.add_done_callback(self._on_path_goal_response)
 
-    # ── Step 1: planner accepted/rejected the goal ─────────────────────────
+    # ─── Step 1: Planner accepted/rejected ────────────────────────────────
+
     def _on_path_goal_response(self, future):
-        # [FIX C1] Nếu e-stop được kích hoạt trong lúc chờ planner, discard hoàn toàn
-        if self.state == State.EMERGENCY_STOP:
+        """Planner phản hồi chấp nhận/từ chối goal."""
+        # Guard: stop đã được gọi trong lúc chờ planner
+        if self._stop_requested:
             self.get_logger().info(
-                "[COMPUTING_PATH] E-stop active — discarding planner goal response.")
+                "[COMPUTING_PATH] stop_requested → discarding path goal response. "
+                "State already STOPPED.")
             return
+
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().error(
-                "ComputePathToPose goal REJECTED. "
+                "[COMPUTING_PATH] Planner REJECTED goal. "
                 "Falling back to direct NavigateToPose (no pre-rotate).")
             self._send_nav_goal(self._pending_cp_id)
             return
+
         goal_handle.get_result_async().add_done_callback(self._on_path_result)
 
-    # ── Step 2: planner returned a path ────────────────────────────────────
+    # ─── Step 2: Planner trả về path ──────────────────────────────────────
+
     def _on_path_result(self, future):
-        # [FIX C1] Guard đầu tiên: nếu state đã chuyển sang EMERGENCY_STOP
-        # trong lúc planner đang tính toán, bỏ qua toàn bộ kết quả.
-        if self.state == State.EMERGENCY_STOP:
+        """Phân tích path, quyết định có cần pre-rotate không."""
+        # Guard: stop trong lúc planner tính toán
+        if self._stop_requested:
             self.get_logger().info(
-                "[COMPUTING_PATH] E-stop active — discarding path result, "
-                "will NOT send NavigateToPose.")
+                "[COMPUTING_PATH] stop_requested → discarding path result. "
+                "Will NOT send NavigateToPose.")
             return
+
         result = future.result()
 
-        # Planner failed
         if result.status != GoalStatus.STATUS_SUCCEEDED:
             self.get_logger().error(
-                f"ComputePathToPose failed (status={result.status}). "
-                "Falling back to direct nav (no pre-rotate).")
+                f"[COMPUTING_PATH] Planner failed (status={result.status}). "
+                "Falling back to direct nav.")
             self._send_nav_goal(self._pending_cp_id)
             return
 
         path: Path = result.result.path
 
-        # Path too short to extract a meaningful heading
         if len(path.poses) < 2:
             self.get_logger().warn(
-                "Path has < 2 poses (goal very close?). Skipping pre-rotate.")
-            self._send_nav_goal(self._pending_cp_id)
-            return
-
-        # Get current robot pose from TF
-        robot_pose = self._get_robot_pose()
-        if robot_pose is None:
-            self.get_logger().warn(
-                "TF unavailable — cannot compute heading error. Skipping pre-rotate.")
-            self._send_nav_goal(self._pending_cp_id)
-            return
-
-        rx, ry, ryaw = robot_pose
-
-        # Extract the initial heading tangent from the path
-        initial_heading = self._extract_initial_heading(path, rx, ry)
-        heading_error   = self._normalize_angle(initial_heading - ryaw)
-
-        self.get_logger().info(
-            f"Path initial heading: {math.degrees(initial_heading):.1f}° | "
-            f"Robot yaw: {math.degrees(ryaw):.1f}° | "
-            f"Error: {math.degrees(heading_error):.1f}°")
-
-        # Below threshold — no need to pre-rotate
-        if abs(heading_error) < PRE_ROTATE_THRESHOLD:
-            self.get_logger().info(
-                f"Heading error {math.degrees(heading_error):.1f}° < "
-                f"threshold {math.degrees(PRE_ROTATE_THRESHOLD):.1f}°. "
+                "[COMPUTING_PATH] Path < 2 poses (goal very close?). "
                 "Skipping pre-rotate.")
             self._send_nav_goal(self._pending_cp_id)
             return
 
-        # Start pre-rotation
+        # Lấy pose robot hiện tại
+        robot_pose = self._get_robot_pose()
+        if robot_pose is None:
+            self.get_logger().warn(
+                "[COMPUTING_PATH] TF unavailable → Skipping pre-rotate.")
+            self._send_nav_goal(self._pending_cp_id)
+            return
+
+        rx, ry, ryaw = robot_pose
+        initial_heading = self._extract_initial_heading(path, rx, ry)
+        heading_error   = self._normalize_angle(initial_heading - ryaw)
+
+        self.get_logger().info(
+            f"[COMPUTING_PATH] Path heading: {math.degrees(initial_heading):+.1f}° │ "
+            f"Robot yaw: {math.degrees(ryaw):+.1f}° │ "
+            f"Error: {math.degrees(heading_error):+.1f}° "
+            f"(threshold: ±{math.degrees(PRE_ROTATE_THRESHOLD):.1f}°)")
+
+        if abs(heading_error) < PRE_ROTATE_THRESHOLD:
+            self.get_logger().info(
+                "[COMPUTING_PATH] Heading error within threshold → Skipping pre-rotate.")
+            self._send_nav_goal(self._pending_cp_id)
+            return
+
+        # Kích hoạt pre-rotate
         self._target_yaw       = initial_heading
         self._pre_rotate_start = time.monotonic()
         self.state             = State.PRE_ROTATING
 
         self.get_logger().info(
-            f"[PRE_ROTATING] Rotating {math.degrees(heading_error):.1f}° "
+            f"[PRE_ROTATING] Rotating {math.degrees(heading_error):+.1f}° "
             f"to align with path tangent...")
         self._pub_status(
-            f"Pre-rotating {math.degrees(heading_error):.0f}° "
-            f"→ [{self._pending_cp_id}] {self.checkpoints[self._pending_cp_id]['name']}")
+            f"Pre-rotating {math.degrees(heading_error):+.0f}° "
+            f"→ [{self._pending_cp_id}] '{self.checkpoints[self._pending_cp_id]['name']}'")
 
-    # ================================================================
-    #  PRE-ROTATE CONTROL LOOP
-    #  Called at 10 Hz from _state_machine while state == PRE_ROTATING
-    # ================================================================
+    # ─── Pre-rotate control loop ──────────────────────────────────────────
+
     def _pre_rotate_tick(self):
-        # ── Timeout guard ─────────────────────────────────────────────────
+        """Chạy 10 Hz khi state == PRE_ROTATING."""
+        # Guard: stop trong lúc pre-rotating
+        if self._stop_requested:
+            self._stop_robot()
+            self.get_logger().info(
+                "[PRE_ROTATING] stop_requested → aborting pre-rotate. "
+                "State already STOPPED.")
+            return
+
         elapsed = time.monotonic() - self._pre_rotate_start
         if elapsed > PRE_ROTATE_TIMEOUT:
             self.get_logger().warn(
-                f"Pre-rotate TIMEOUT ({PRE_ROTATE_TIMEOUT:.0f}s). "
+                f"[PRE_ROTATING] Timeout ({PRE_ROTATE_TIMEOUT:.0f}s). "
                 "Proceeding to navigate anyway.")
             self._stop_robot()
             self._send_nav_goal(self._pending_cp_id)
             return
 
-        # ── Get current heading ────────────────────────────────────────────
         robot_pose = self._get_robot_pose()
         if robot_pose is None:
-            # TF not ready yet — keep previous cmd_vel and wait
-            return
+            return  # TF chưa sẵn sàng, giữ cmd_vel cũ và chờ
 
         _, _, ryaw    = robot_pose
         heading_error = self._normalize_angle(self._target_yaw - ryaw)
 
-        # ── Convergence check ─────────────────────────────────────────────
+        # Kiểm tra hội tụ
         if abs(heading_error) < PRE_ROTATE_STOP_THR:
             self.get_logger().info(
-                f"[PRE_ROTATING] Converged. "
-                f"Residual error: {math.degrees(heading_error):.2f}° "
-                f"after {elapsed:.1f}s.")
+                f"[PRE_ROTATING] ✓ Converged │ "
+                f"residual={math.degrees(heading_error):+.2f}° │ "
+                f"elapsed={elapsed:.1f}s")
             self._stop_robot()
             self._send_nav_goal(self._pending_cp_id)
             return
 
-        # ── P controller with velocity clamping ───────────────────────────
-        # raw_w = Kp * error (can be any magnitude)
-        # clamp to [MIN_W, MAX_W] while preserving sign
+        # P controller
         raw_w = PRE_ROTATE_KP * heading_error
         sign  = 1.0 if raw_w >= 0.0 else -1.0
         w     = sign * max(PRE_ROTATE_MIN_W, min(PRE_ROTATE_MAX_W, abs(raw_w)))
 
-        # Publish pure rotation command (no linear velocity!)
-        twist             = Twist()
-        twist.linear.x    = 0.0
-        twist.angular.z   = w
+        twist = Twist()
+        twist.angular.z = w
         self._cmdvel_pub.publish(twist)
 
-        # Debug log every ~1 s (every 10 ticks)
-        tick_count = int(elapsed / 0.1)
-        if tick_count % 10 == 0:
+        # Debug log mỗi 1s
+        if int(elapsed / 0.1) % 10 == 0:
             self.get_logger().debug(
-                f"[PRE_ROTATING] error={math.degrees(heading_error):.1f}°  "
-                f"w={w:.2f} rad/s  elapsed={elapsed:.1f}s")
+                f"[PRE_ROTATING] err={math.degrees(heading_error):+.1f}° │ "
+                f"w={w:+.2f} rad/s │ elapsed={elapsed:.1f}s")
 
-    # ================================================================
-    #  SEND NAV2 GOAL  (called after pre-rotate finishes or is skipped)
-    # ================================================================
+    # ─── Send NavigateToPose goal ─────────────────────────────────────────
+
     def _send_nav_goal(self, cp_id: int):
         """
-        Sends NavigateToPose to Nav2. At this point the robot is already
-        approximately aligned with the initial path tangent, so the
-        controller should move forward cleanly.
+        Gửi NavigateToPose đến Nav2.
+        Đây là điểm cuối của pipeline — guard stop_requested trước khi gửi.
         """
-        # [FIX C1] Guard: không gửi NavigateToPose nếu đang EMERGENCY_STOP.
-        # Đây là điểm cuối cùng trước khi goal được gửi đi — critical guard.
-        if self.state == State.EMERGENCY_STOP:
+        # Guard: stop đã được yêu cầu → không gửi
+        if self._stop_requested:
             self.get_logger().warn(
-                f"[_send_nav_goal] E-stop active — blocked NavigateToPose to [{cp_id}].")
+                f"[NAVIGATING] stop_requested → blocked NavigateToPose to [{cp_id}].")
             return
-        
+
         self.target_cp = cp_id
         self.state     = State.NAVIGATING
 
@@ -495,102 +701,116 @@ class CheckpointNavigator(Node):
         goal      = NavigateToPose.Goal()
         goal.pose = pose
 
+        cp_name = self.checkpoints[cp_id]["name"]
         self.get_logger().info(
-            f"[NAVIGATING] → [{cp_id}] {self.checkpoints[cp_id]['name']} "
-            f"x={pose.pose.position.x:.2f} y={pose.pose.position.y:.2f}")
-        self._pub_status(
-            f"Navigating to [{cp_id}] {self.checkpoints[cp_id]['name']}")
+            f"[NAVIGATING] ► [{cp_id}] '{cp_name}' │ "
+            f"x={pose.pose.position.x:.2f} y={pose.pose.position.y:.2f} │ "
+            f"is_returning_home={self._is_returning_home}")
+        self._pub_status(f"Navigating → [{cp_id}] '{cp_name}'")
 
         self._nav.send_goal_async(goal).add_done_callback(self._on_goal_accepted)
 
     def _on_goal_accepted(self, future):
-        # [FIX C1] Guard: nếu e-stop xảy ra giữa khi gửi goal và callback này,
-        # cancel ngay goal vừa được accepted.
+        """Nav2 đã chấp nhận/từ chối goal."""
         handle = future.result()
-        if self.state == State.EMERGENCY_STOP:
+
+        # Guard: stop xảy ra giữa lúc gửi goal và callback này
+        if self._stop_requested:
             self.get_logger().warn(
-                "[_on_goal_accepted] E-stop active — canceling just-accepted goal.")
+                "[NAVIGATING] stop_requested after goal sent → canceling accepted goal.")
             if handle.accepted:
                 handle.cancel_goal_async()
             return
 
         self.goal_handle = handle
         if not self.goal_handle.accepted:
-            self.get_logger().error("NavigateToPose goal REJECTED by Nav2.")
+            self.get_logger().error(
+                "[NAVIGATING] Nav2 REJECTED NavigateToPose goal!")
             self.state = State.IDLE
+            self._pub_status("Goal rejected by Nav2. Robot IDLE.")
             return
+
+        self.get_logger().info(
+            f"[NAVIGATING] Nav2 accepted goal to [{self.target_cp}].")
         self.goal_handle.get_result_async().add_done_callback(self._on_result)
 
     def _on_result(self, future):
-        # [FIX C1] Guard: nếu e-stop đã active khi result về,
-        # không thay đổi state (đang là EMERGENCY_STOP — giữ nguyên).
-        if self.state == State.EMERGENCY_STOP:
-            self.get_logger().info(
-                "[_on_result] E-stop active — discarding nav result.")
-            return
-
+        """Nhận kết quả sau khi Nav2 hoàn thành (succeed/canceled/aborted)."""
         status = future.result().status
+        cp_id  = self.target_cp
+        cp_name = self.checkpoints.get(cp_id, {}).get("name", "?")
 
+        self.get_logger().info(
+            f"[RESULT] Goal to [{cp_id}] '{cp_name}' finished │ "
+            f"status={status} │ "
+            f"is_returning_home={self._is_returning_home} │ "
+            f"intentional_cancel={self._intentional_cancel}")
+
+        # ── SUCCEEDED ────────────────────────────────────────────────────
         if status == GoalStatus.STATUS_SUCCEEDED:
-            self.current_cp       = self.target_cp
-            self.arrival_time     = time.time()
-            self._home_retry_count = 0      # [FIX M4] reset khi thành công về home
-            name = self.checkpoints[self.current_cp]["name"]
+            self.current_cp        = cp_id
+            self._home_retry_count = 0
 
-            # Dùng flag thay vì self.state == State.RETURNING_HOME
             if self._is_returning_home:
-                self._is_returning_home = False   # ← reset flag
+                self._is_returning_home = False
                 self.state = State.IDLE
                 self.get_logger().info(
-                    f"Arrived at Home [{self.current_cp}] '{name}'. State: IDLE.")
-                self._pub_status(f"At Home [{self.current_cp}]. IDLE.")
-            else:
-                self.state = State.AT_CHECKPOINT
-                self.get_logger().info(
-                    f"Arrived at [{self.current_cp}] '{name}'. "
-                    f"Returning home in {self.timeout:.0f}s.")
+                    f"[RESULT] ✓ Arrived at HOME [{cp_id}] '{cp_name}'. "
+                    "State: IDLE.")
                 self._pub_status(
-                    f"At [{self.current_cp}] '{name}'. "
-                    f"Returning home in {self.timeout:.0f}s.")
-
-        elif status == GoalStatus.STATUS_CANCELED:
-            self._is_returning_home = False   # ← reset flag
-            self._home_retry_count  = 0     # [FIX M4] reset counter khi bị cancel (có thể do timeout return home)
-            self.current_cp = -1
-            if self.state != State.EMERGENCY_STOP:
+                    f"At Home [{cp_id}] '{cp_name}'. IDLE.")
+            else:
                 self.state = State.IDLE
-                self.get_logger().info("Goal canceled. State: IDLE.")
+                self.get_logger().info(
+                    f"[RESULT] ✓ Arrived at [{cp_id}] '{cp_name}'. "
+                    "State: IDLE.")
+                self._pub_status(
+                    f"Arrived at [{cp_id}] '{cp_name}'. "
+                    "Send 'go:<id>' for next destination.")
 
+        # ── CANCELED ─────────────────────────────────────────────────────
+        elif status == GoalStatus.STATUS_CANCELED:
+            if self._intentional_cancel:
+                # Cancel chủ ý từ lệnh stop → không đổi state (đã set STOPPED)
+                self._intentional_cancel = False
+                self.get_logger().info(
+                    "[RESULT] Intentional cancel confirmed. State remains STOPPED.")
+            else:
+                # Cancel ngoài ý muốn (Nav2 tự cancel)
+                self.get_logger().warn(
+                    "[RESULT] Unexpected cancel from Nav2. State → IDLE.")
+                self._is_returning_home = False
+                self._home_retry_count  = 0
+                self.current_cp         = -1
+                self.state              = State.IDLE
+                self._pub_status("Navigation canceled unexpectedly. IDLE.")
+
+        # ── ABORTED ──────────────────────────────────────────────────────
         elif status == GoalStatus.STATUS_ABORTED:
-            # [FIX M4] Retry logic khi về home bị abort
             if self._is_returning_home and self._home_retry_count < HOME_RETRY_MAX:
                 self._home_retry_count += 1
                 self.get_logger().warn(
-                    f"RETURNING_HOME aborted. Retrying ({self._home_retry_count}/{HOME_RETRY_MAX}) "
+                    f"[RESULT] RETURNING_HOME aborted │ "
+                    f"Retry {self._home_retry_count}/{HOME_RETRY_MAX} "
                     f"in {HOME_RETRY_DELAY_S:.0f}s...")
                 self._pub_status(
                     f"Home path blocked. Retry {self._home_retry_count}/{HOME_RETRY_MAX} "
                     f"in {HOME_RETRY_DELAY_S:.0f}s.")
-
-                # Dùng timer một lần để không block executor
-                self.create_timer(
-                    HOME_RETRY_DELAY_S,
-                    self._retry_home_once
-                )
+                self.create_timer(HOME_RETRY_DELAY_S, self._retry_home_once)
             else:
-                # Hết retry hoặc không phải returning home
                 if self._is_returning_home:
                     self.get_logger().error(
-                        f"CRITICAL: Cannot reach home after {HOME_RETRY_MAX} retries. "
-                        "Manual intervention needed.")
+                        f"[RESULT] CRITICAL: Cannot reach home after "
+                        f"{HOME_RETRY_MAX} retries. Manual intervention needed!")
                     self._pub_status(
                         f"CRITICAL: Cannot reach home [{self.home_id}]. "
-                        "Please move obstacles or manually return robot.")
+                        "Please manually move robot.")
                 else:
                     self.get_logger().error(
-                        f"Navigation ABORTED to [{self.target_cp}]. "
-                        "Check costmap / path planner.")
-                    self._pub_status(f"Aborted. Could not reach [{self.target_cp}].")
+                        f"[RESULT] Navigation to [{cp_id}] '{cp_name}' ABORTED. "
+                        "Path blocked or planner failed.")
+                    self._pub_status(
+                        f"Aborted. Could not reach [{cp_id}] '{cp_name}'. IDLE.")
 
                 self._is_returning_home = False
                 self._home_retry_count  = 0
@@ -598,44 +818,27 @@ class CheckpointNavigator(Node):
                 self.state              = State.IDLE
 
     def _retry_home_once(self):
-        """
-        [FIX M4] Timer callback được gọi 1 lần sau HOME_RETRY_DELAY_S.
-        Hủy timer và thực hiện retry về home.
-        """
-        # Timer trong ROS 2 Foxy không có cancel() đơn giản trong callback,
-        # nhưng vì chỉ gọi 1 lần, ta dùng flag để tránh gọi lại.
-        if not self._is_returning_home:
-            # E-stop hoặc lệnh khác đã thay đổi state — bỏ qua retry
-            return
-        if self.state == State.EMERGENCY_STOP:
+        """Timer callback cho home retry."""
+        if not self._is_returning_home or self.state == State.STOPPED:
             return
         self.get_logger().info(
-            f"[RETURNING_HOME] Retry attempt {self._home_retry_count}/{HOME_RETRY_MAX}...")
+            f"[HOME_RETRY] Attempt {self._home_retry_count}/{HOME_RETRY_MAX} → "
+            f"home [{self.home_id}]")
         self._request_navigation(self.home_id)
 
-
-    # ================================================================
+    # ════════════════════════════════════════════════════════
     #  UTILITY METHODS
-    # ================================================================
-    def _extract_initial_heading(self, path: Path, rx: float, ry: float) -> float:
-        """
-        Walks along the path poses and returns the heading (in map frame)
-        from the robot to the first pose that is at least PRE_ROTATE_LOOKAHEAD
-        meters away.
+    # ════════════════════════════════════════════════════════
 
-        Edge cases handled:
-          - Path entirely within lookahead (very close goal): use last pose.
-          - Only 1 pose: use heading robot→that pose.
-        """
+    def _extract_initial_heading(self, path: Path, rx: float, ry: float) -> float:
+        """Trả về heading (rad, map frame) từ robot đến điểm lookahead trên path."""
         poses = path.poses
 
         if len(poses) == 1:
-            # degenerate path
             px = poses[0].pose.position.x
             py = poses[0].pose.position.y
             return math.atan2(py - ry, px - rx)
 
-        # Walk the path until distance from robot exceeds lookahead
         for pose_stamped in poses:
             px   = pose_stamped.pose.position.x
             py   = pose_stamped.pose.position.y
@@ -643,45 +846,33 @@ class CheckpointNavigator(Node):
             if dist >= PRE_ROTATE_LOOKAHEAD:
                 return math.atan2(py - ry, px - rx)
 
-        # All path points are within lookahead → use last point
-        last_pose = poses[-1].pose.position
-        self.get_logger().debug(
-            "All path points within lookahead — using last path point for heading.")
-        return math.atan2(last_pose.y - ry, last_pose.x - rx)
+        # Tất cả điểm đều gần hơn lookahead → dùng điểm cuối
+        last = poses[-1].pose.position
+        return math.atan2(last.y - ry, last.x - rx)
 
     def _get_robot_pose(self):
-        """
-        Returns (x, y, yaw_rad) of base_footprint in map frame.
-        Returns None if TF is not yet available.
-        """
+        """Trả về (x, y, yaw_rad) của base_footprint trong frame map. None nếu lỗi."""
         try:
             tf = self._tf_buffer.lookup_transform(
-                "map",            # target frame
-                "base_footprint", # source frame
+                "map", "base_footprint",
                 rclpy.time.Time(),
                 timeout=Duration(seconds=0.1)
             )
-        except tf2_ros.LookupException as e:
+        except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
             self.get_logger().warn(
-                f"TF lookup failed: {e}", throttle_duration_sec=2.0)
-            return None
-        except tf2_ros.ExtrapolationException as e:
-            self.get_logger().warn(
-                f"TF extrapolation failed: {e}", throttle_duration_sec=2.0)
+                f"TF error: {e}", throttle_duration_sec=2.0)
             return None
 
         x = tf.transform.translation.x
         y = tf.transform.translation.y
         q = tf.transform.rotation
-        # quaternion → yaw  (standard formula)
-        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
-        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-        yaw       = math.atan2(siny_cosp, cosy_cosp)
-        return x, y, yaw
+        siny = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        return x, y, math.atan2(siny, cosy)
 
     @staticmethod
     def _normalize_angle(angle: float) -> float:
-        """Wrap angle to (−π, π]."""
+        """Wrap to (−π, π]."""
         while angle >  math.pi:
             angle -= 2.0 * math.pi
         while angle <= -math.pi:
@@ -689,37 +880,41 @@ class CheckpointNavigator(Node):
         return angle
 
     def _stop_robot(self):
-        """Publishes a zero-velocity Twist to stop any in-place rotation."""
+        """Gửi Twist(0) để dừng robot ngay."""
         self._cmdvel_pub.publish(Twist())
 
-    # ================================================================
+    # ════════════════════════════════════════════════════════
     #  STATE PUBLISHERS
-    # ================================================================
+    # ════════════════════════════════════════════════════════
+
     def _publish_state(self):
+        """1 Hz — broadcast state và current checkpoint."""
         m = String(); m.data = self.state.value;  self._state_pub.publish(m)
         m = Int32();  m.data = self.current_cp;   self._cp_pub.publish(m)
 
     def _pub_status(self, message: str):
-        m = String(); m.data = message;           self._status_pub.publish(m)
+        """Publish status message và log ra terminal."""
+        self.get_logger().info(f"[STATUS] {message}")
+        m = String(); m.data = message
+        self._status_pub.publish(m)
 
 
-# ================================================================
+# ════════════════════════════════════════════════════════
 #  MAIN
-# ================================================================
+# ════════════════════════════════════════════════════════
+
 def main(args=None):
     rclpy.init(args=args)
 
     try:
         node = CheckpointNavigator()
     except RuntimeError as e:
-        # [FIX M3] RuntimeError từ wait_for_server timeout được bắt ở đây,
-        # in log rõ ràng trước khi thoát — không zombie.
         import logging
-        logging.getLogger("navigator").error(
-            f"CheckpointNavigator failed to initialize: {e}")
+        logging.getLogger("navigator_v2").error(
+            f"CheckpointNavigator failed to start: {e}")
         rclpy.shutdown()
         return
-    
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

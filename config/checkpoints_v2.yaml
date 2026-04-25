@@ -3,10 +3,10 @@ checkpoints:
   id: 0
   name: home
   orientation:
-    w: 0.0
+    w: 0.7057
     x: 0.0
     y: 0.0
-    z: 0.0
+    z: 0.7085
   position:
     x: 0.0
     y: 0.0

@@ -1,175 +1,361 @@
 #!/usr/bin/env python3
 """
-send_checkpoint_command.py
-===========================
-Interactive CLI to control the checkpoint navigator.
+checkpoint_cmd_2.py — Clean Terminal Edition
+=============================================
+Interactive CLI for navigator_v2.py.
 
-Usage:
-    ros2 run mobile_robot send_checkpoint_command.py
+Only 4 user commands are accepted:
+    go <id>
+    stop
+    continue
+    reset
 
-Commands:
-    go <id>   Navigate to checkpoint
-    stop      Emergency stop
-    reset     Reset emergency stop
-    status    Show current state
-    list      Show all checkpoints
-    help      Show this help
-    quit      Exit
+ROS interface:
+    Pub: /robot/command              std_msgs/String
+         "go:<id>", "stop", "continue", "reset"
+    Sub: /robot/state                std_msgs/String
+    Sub: /robot/current_checkpoint   std_msgs/Int32
+    Sub: /robot/status_message       std_msgs/String
+
+Exit:
+    Ctrl+C or EOF.
 """
 
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import String, Bool, Int32
+import os
 import sys
 import time
+import threading
+from typing import Dict, Optional
+
 import yaml
-import os
+import rclpy
+from rclpy.node import Node
+from rclpy.executors import ExternalShutdownException
 from ament_index_python.packages import get_package_share_directory
+from std_msgs.msg import String, Int32
 
 
-CHECKPOINTS = {}
+# ============================================================
+#  Display policy
+# ============================================================
+# True  : dùng màu ANSI cho terminal dễ nhìn.
+# False : không dùng màu, phù hợp khi ghi log ra file.
+USE_COLOR = True
+
+# Không in lặp lại cùng một status từ /robot/status_message.
+PRINT_STATUS_MESSAGE = True
+
+# Nếu navigator_v2.py chưa chạy, chỉ cảnh báo 1 lần để tránh spam.
+WARN_NO_NAVIGATOR_ONCE = True
 
 
-def load_checkpoints():
+# ============================================================
+#  Terminal color helper
+# ============================================================
+class C:
+    RESET = "\033[0m" if USE_COLOR else ""
+    BOLD = "\033[1m" if USE_COLOR else ""
+    DIM = "\033[2m" if USE_COLOR else ""
+    RED = "\033[91m" if USE_COLOR else ""
+    GREEN = "\033[92m" if USE_COLOR else ""
+    YELLOW = "\033[93m" if USE_COLOR else ""
+    CYAN = "\033[96m" if USE_COLOR else ""
+
+    @staticmethod
+    def bold(s: str) -> str:
+        return f"{C.BOLD}{s}{C.RESET}"
+
+    @staticmethod
+    def dim(s: str) -> str:
+        return f"{C.DIM}{s}{C.RESET}"
+
+    @staticmethod
+    def ok(s: str) -> str:
+        return f"{C.GREEN}{s}{C.RESET}"
+
+    @staticmethod
+    def warn(s: str) -> str:
+        return f"{C.YELLOW}{s}{C.RESET}"
+
+    @staticmethod
+    def err(s: str) -> str:
+        return f"{C.RED}{s}{C.RESET}"
+
+    @staticmethod
+    def info(s: str) -> str:
+        return f"{C.CYAN}{s}{C.RESET}"
+
+
+STATE_HINTS = {
+    "unknown": "wait",
+    "IDLE": "go <id>",
+    "COMPUTING_PATH": "stop",
+    "PRE_ROTATING": "stop",
+    "NAVIGATING": "stop",
+    "STOPPED": "continue | reset",
+    "WAITING_RESET": "go <id> | wait home",
+    "RETURNING_HOME": "wait",
+}
+
+STATE_COLOR = {
+    "IDLE": C.ok,
+    "COMPUTING_PATH": C.info,
+    "PRE_ROTATING": C.info,
+    "NAVIGATING": C.info,
+    "STOPPED": C.warn,
+    "WAITING_RESET": C.warn,
+    "RETURNING_HOME": C.info,
+    "unknown": C.dim,
+}
+
+CHECKPOINTS: Dict[int, str] = {}
+
+
+# ============================================================
+#  Checkpoint loader
+# ============================================================
+def load_checkpoints() -> str:
+    """Load config/checkpoints_v2.yaml from installed mobile_robot package."""
     try:
-        pkg  = get_package_share_directory("mobile_robot")
+        pkg = get_package_share_directory("mobile_robot")
         path = os.path.join(pkg, "config", "checkpoints_v2.yaml")
+
         with open(path, "r") as f:
-            data = yaml.safe_load(f)
+            data = yaml.safe_load(f) or {}
+
+        CHECKPOINTS.clear()
         for cp in data.get("checkpoints", []):
-            CHECKPOINTS[cp["id"]] = cp.get("display_name", cp["name"])
-    except Exception:
-        pass
+            cp_id = int(cp["id"])
+            cp_name = cp.get("display_name", cp.get("name", str(cp_id)))
+            CHECKPOINTS[cp_id] = cp_name
+
+        return path
+
+    except Exception as exc:
+        print(C.warn(f"WARN checkpoint file not loaded: {exc}"))
+        CHECKPOINTS.clear()
+        return ""
 
 
+def format_checkpoint_list() -> str:
+    """Return checkpoint list in one compact line."""
+    if not CHECKPOINTS:
+        return "none"
+    return " | ".join(f"{cid}:{name}" for cid, name in sorted(CHECKPOINTS.items()))
+
+
+def cp_name(cp_id: Optional[int]) -> str:
+    if cp_id is None or cp_id < 0:
+        return "-"
+    return CHECKPOINTS.get(cp_id, str(cp_id))
+
+
+# ============================================================
+#  ROS 2 command sender
+# ============================================================
 class CommandSender(Node):
-
     def __init__(self):
-        super().__init__("checkpoint_command_sender")
+        super().__init__("checkpoint_command_sender_v2")
 
-        self._nav_pub   = self.create_publisher(
-            Int32, "/robot/navigate_to_checkpoint", 10)
-        self._estop_pub = self.create_publisher(
-            Bool, "/robot/emergency_stop", 10)
+        self._cmd_pub = self.create_publisher(String, "/robot/command", 10)
 
-        self._state       = "unknown"
-        self._current_cp  = -1
-        self._status_msg  = ""
+        self._state = "unknown"
+        self._current_cp = -1
+        self._status_msg = ""
+        self._last_printed_status = ""
+        self._warned_no_navigator = False
+        self._lock = threading.Lock()
 
-        self.create_subscription(
-            String, "/robot/state",
-            lambda m: setattr(self, "_state", m.data), 10)
-        self.create_subscription(
-            Int32, "/robot/current_checkpoint",
-            lambda m: setattr(self, "_current_cp", m.data), 10)
-        self.create_subscription(
-            String, "/robot/status_message",
-            lambda m: setattr(self, "_status_msg", m.data), 10)
+        self.create_subscription(String, "/robot/state", self._on_state, 10)
+        self.create_subscription(Int32, "/robot/current_checkpoint", self._on_checkpoint, 10)
+        self.create_subscription(String, "/robot/status_message", self._on_status, 10)
 
+    # ------------------------- callbacks -------------------------
+    def _on_state(self, msg: String):
+        new_state = msg.data.strip() or "unknown"
+
+        with self._lock:
+            old_state = self._state
+            self._state = new_state
+            current_cp = self._current_cp
+
+        # Chỉ in khi state thật sự đổi.
+        if new_state != old_state:
+            print(self._compact_state_line(new_state, current_cp), flush=True)
+
+    def _on_checkpoint(self, msg: Int32):
+        with self._lock:
+            self._current_cp = int(msg.data)
+
+    def _on_status(self, msg: String):
+        if not PRINT_STATUS_MESSAGE:
+            return
+
+        text = msg.data.strip()
+        if not text:
+            return
+
+        with self._lock:
+            if text == self._last_printed_status:
+                return
+            self._status_msg = text
+            self._last_printed_status = text
+
+        # Một dòng duy nhất, không in block dài.
+        print(C.dim(f"INFO {text}"), flush=True)
+
+    # ------------------------- display helpers -------------------------
+    def _compact_state_line(self, state: str, current_cp: int) -> str:
+        color = STATE_COLOR.get(state, lambda s: s)
+        hint = STATE_HINTS.get(state, "-")
+        cp_text = cp_name(current_cp)
+        return f"STATE {color(state):<18} | CP {current_cp if current_cp >= 0 else '-'}:{cp_text} | NEXT {hint}"
+
+    def prompt(self) -> str:
+        with self._lock:
+            state = self._state
+        hint = STATE_HINTS.get(state, "cmd")
+        return f"[{state} | {hint}]> "
+
+    # ------------------------- ROS helpers -------------------------
+    def _warn_if_no_navigator(self):
+        if self._cmd_pub.get_subscription_count() == 0:
+            if not WARN_NO_NAVIGATOR_ONCE or not self._warned_no_navigator:
+                print(C.warn("WARN navigator not detected on /robot/command"), flush=True)
+                self._warned_no_navigator = True
+
+    def wait_for_navigator(self, timeout_s: float = 1.0) -> bool:
+        """Wait briefly for navigator_v2.py to appear on /robot/command."""
+        start = time.time()
+        while rclpy.ok() and time.time() - start < timeout_s:
+            if self._cmd_pub.get_subscription_count() > 0:
+                return True
+            time.sleep(0.05)
+        return self._cmd_pub.get_subscription_count() > 0
+
+    def publish_command(self, command: str):
+        self._warn_if_no_navigator()
+        msg = String()
+        msg.data = command
+        self._cmd_pub.publish(msg)
+
+    # ------------------------- command helpers -------------------------
     def send_go(self, cp_id: int):
         if CHECKPOINTS and cp_id not in CHECKPOINTS:
-            print(f"Checkpoint {cp_id} not found. Valid: {list(CHECKPOINTS.keys())}")
+            print(C.err(f"ERR invalid checkpoint {cp_id}; valid={sorted(CHECKPOINTS.keys())}"), flush=True)
             return
-        m = Int32(); m.data = cp_id
-        self._nav_pub.publish(m)
+
         name = CHECKPOINTS.get(cp_id, str(cp_id))
-        print(f"Sent: go to [{cp_id}] {name}")
+        self.publish_command(f"go:{cp_id}")
+        print(C.ok(f"SEND go {cp_id} -> {name}"), flush=True)
 
-    def send_estop(self, activate: bool):
-        m = Bool(); m.data = activate
-        self._estop_pub.publish(m)
-        print("Sent: EMERGENCY STOP" if activate else "Sent: reset emergency stop")
+    def send_stop(self):
+        self.publish_command("stop")
+        print(C.warn("SEND stop"), flush=True)
 
-    def print_status(self):
-        # Spin briefly to get latest state
-        rclpy.spin_once(self, timeout_sec=0.3)
-        name = CHECKPOINTS.get(self._current_cp, str(self._current_cp))
-        print(f"State      : {self._state}")
-        print(f"Current CP : [{self._current_cp}] {name}")
-        if self._status_msg:
-            print(f"Message    : {self._status_msg}")
+    def send_continue(self):
+        self.publish_command("continue")
+        print(C.ok("SEND continue"), flush=True)
 
-    def print_checkpoints(self):
-        if not CHECKPOINTS:
-            print("No checkpoint info available.")
+    def send_reset(self):
+        self.publish_command("reset")
+        print(C.warn("SEND reset"), flush=True)
+
+
+# ============================================================
+#  Terminal UI
+# ============================================================
+def print_startup(navigator_connected: bool):
+    """
+    Startup output is intentionally short:
+      1 title line
+      1 command line
+      1 checkpoint line
+      1 navigator connection line
+    """
+    print(C.bold("Checkpoint Commander v2"))
+    print("CMD  go <id> | stop | continue | reset | Ctrl+C exit")
+    print(f"CP   {format_checkpoint_list()}")
+    print(f"NAV  {'connected' if navigator_connected else 'not detected'}")
+    print()
+
+
+def parse_and_send(raw: str, node: CommandSender):
+    parts = raw.strip().lower().split()
+    if not parts:
+        return
+
+    cmd = parts[0]
+
+    if cmd == "go":
+        if len(parts) != 2:
+            print(C.err("ERR usage: go <id>"), flush=True)
             return
-        print("Checkpoints:")
-        for cid, name in sorted(CHECKPOINTS.items()):
-            print(f"  [{cid}] {name}")
+        try:
+            node.send_go(int(parts[1]))
+        except ValueError:
+            print(C.err("ERR checkpoint id must be an integer"), flush=True)
+        return
+
+    if cmd == "stop" and len(parts) == 1:
+        node.send_stop()
+        return
+
+    if cmd == "continue" and len(parts) == 1:
+        node.send_continue()
+        return
+
+    if cmd == "reset" and len(parts) == 1:
+        node.send_reset()
+        return
+
+    print(C.err("ERR command must be: go <id> | stop | continue | reset"), flush=True)
 
 
-def print_help():
-    print("\n--- Checkpoint Command Sender ---")
-    print("  go <id>   Navigate to checkpoint")
-    print("  stop      Emergency stop")
-    print("  reset     Reset emergency stop")
-    print("  status    Show current state")
-    print("  list      Show all checkpoints")
-    print("  help      Show this help")
-    print("  quit      Exit")
-    print("---------------------------------\n")
+def spin_worker(node: Node):
+    try:
+        rclpy.spin(node)
+    except (ExternalShutdownException, KeyboardInterrupt):
+        pass
+    except Exception as exc:
+        print(C.warn(f"WARN ROS spin: {exc}"), file=sys.stderr)
 
 
+# ============================================================
+#  Main
+# ============================================================
 def main(args=None):
     rclpy.init(args=args)
+
     load_checkpoints()
     node = CommandSender()
 
-    # Brief spin to connect subscribers
-    rclpy.spin_once(node, timeout_sec=0.5)
+    spin_thread = threading.Thread(target=spin_worker, args=(node,), daemon=True)
+    spin_thread.start()
 
-    print_help()
-    if CHECKPOINTS:
-        node.print_checkpoints()
-        print()
+    navigator_connected = node.wait_for_navigator(timeout_s=1.0)
+    print_startup(navigator_connected)
 
     try:
         while rclpy.ok():
             try:
-                raw = input("cmd> ").strip()
+                raw = input(node.prompt()).strip()
             except EOFError:
                 break
-            if not raw:
-                continue
 
-            parts = raw.lower().split()
-            cmd   = parts[0]
-
-            if cmd == "go":
-                if len(parts) != 2:
-                    print("Usage: go <id>")
-                    continue
-                try:
-                    node.send_go(int(parts[1]))
-                except ValueError:
-                    print("ID must be an integer.")
-
-            elif cmd == "stop":
-                node.send_estop(True)
-
-            elif cmd == "reset":
-                node.send_estop(False)
-
-            elif cmd == "status":
-                node.print_status()
-
-            elif cmd in ("list", "ls"):
-                node.print_checkpoints()
-
-            elif cmd == "help":
-                print_help()
-
-            elif cmd in ("quit", "exit", "q"):
-                break
-
-            else:
-                print(f"Unknown command '{raw}'. Type 'help'.")
+            parse_and_send(raw, node)
 
     except KeyboardInterrupt:
-        pass
+        print("\nexit")
+
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        if rclpy.ok():
+            rclpy.shutdown()
+        spin_thread.join(timeout=1.0)
 
 
 if __name__ == "__main__":
