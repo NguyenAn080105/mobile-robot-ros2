@@ -199,7 +199,7 @@ controller_server:
       yaw_goal_tolerance: 0.2     # [rad] dung sai góc tại đích (~10 độ)
 
       # ── Các hàm chấm điểm (critic) ───────────────────────────────────────
-      critics: ["ObstacleFootprint","RotateToGoal", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+      critics: ["ObstacleFootprintCritic","RotateToGoal", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
 
       ObstacleFootprintCritic.scale: 80.0    # phạt khi chân robot chạm vào vật cản
 

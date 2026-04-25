@@ -58,7 +58,7 @@ def generate_launch_description():
     # ====================== CHECKPOINT NAVIGATOR ======================
     navigator_node = Node(
         package='mobile_robot',
-        executable='navigator_v2.py',
+        executable='navigator_v3.py',
         name='navigator',
         output='screen',
         parameters=[{
