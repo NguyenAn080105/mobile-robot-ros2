@@ -30,7 +30,7 @@ def generate_launch_description():
     # RViz KHÔNG chạy trong spawn file, chỉ chạy một lần ở file này.
     spawn_sim_robot = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_share, 'launch', 'spawn_sim_robot_v3.launch.py')
+            os.path.join(pkg_share, 'launch', 'spawn_sim_robot_v2.launch.py')
         ),
         launch_arguments={
             'use_sim_time': use_sim_time,
