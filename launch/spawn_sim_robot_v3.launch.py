@@ -1,11 +1,12 @@
 import os
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, Command
-from launch.event_handlers import OnProcessStart, OnExecutionComplete
 from launch_ros.actions import Node
+
 
 def generate_launch_description():
     package_name = 'mobile_robot'
@@ -13,18 +14,16 @@ def generate_launch_description():
     pkg_gazebo_ros = get_package_share_directory('gazebo_ros')
 
     # ====================== PATH ======================
-    default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot_v3.urdf.xacro')
-    default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room.world')
-    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'nav_fusion_config.rviz')
-    ekf_config_path     = os.path.join(pkg_share, 'config', 'ekf.yaml')
-    filter_config       = os.path.join(pkg_share, 'config', 'laser_filter.yaml')
+    default_model_path = os.path.join(pkg_share, 'urdf', 'mobile_robot_v3.urdf.xacro')
+    default_world_path = os.path.join(pkg_share, 'worlds', 'sim_room.world')
+    ekf_config_path    = os.path.join(pkg_share, 'config', 'ekf.yaml')
+    filter_config      = os.path.join(pkg_share, 'config', 'laser_filter.yaml')
 
     # ====================== Launch Config ======================
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     urdf_model   = LaunchConfiguration('model',        default=default_model_path)
-    world_file   = LaunchConfiguration('world',        default=default_world_path)
 
-    # ====================== Gazebo ====================== 
+    # ====================== Gazebo ======================
     gazebo_server = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')
@@ -38,7 +37,7 @@ def generate_launch_description():
         )
     )
 
-    # ====================== Robot State Publisher ====================== 
+    # ====================== Robot State Publisher ======================
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -50,7 +49,7 @@ def generate_launch_description():
         }]
     )
 
-    # ====================== EKF Node (robot_localization) ======================
+    # ====================== EKF Node ======================
     ekf_node = Node(
         package='robot_localization',
         executable='ekf_node',
@@ -81,7 +80,7 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    # ====================== Spawn Entity ====================== 
+    # ====================== Spawn Entity ======================
     spawn_entity = Node(
         package='gazebo_ros',
         executable='spawn_entity.py',
@@ -94,22 +93,9 @@ def generate_launch_description():
         ]
     )
 
-    # ====================== RViz2 Visualization ====================== 
-    rviz2 = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        prefix='env LIBGL_ALWAYS_SOFTWARE=1',
-        parameters=[{'use_sim_time': use_sim_time}],
-        arguments=['-d', default_rviz_config]
-    )
-
-
-    delayed_rviz2  = TimerAction(period=3.0, actions=[rviz2])
-    delayed_filter = TimerAction(period=2.0,  actions=[scan_filter])
-    delayed_ultrasonic_fusion = TimerAction(period=3.0, actions=[ultrasonic_fusion])
-    delayed_spawn_entity = TimerAction(period=1.0, actions=[spawn_entity])
+    delayed_spawn_entity       = TimerAction(period=1.0, actions=[spawn_entity])
+    delayed_filter             = TimerAction(period=2.0, actions=[scan_filter])
+    delayed_ultrasonic_fusion  = TimerAction(period=3.0, actions=[ultrasonic_fusion])
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
@@ -123,5 +109,4 @@ def generate_launch_description():
         delayed_spawn_entity,
         delayed_filter,
         delayed_ultrasonic_fusion,
-        # delayed_rviz2,
     ])
