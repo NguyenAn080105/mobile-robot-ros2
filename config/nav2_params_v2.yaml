@@ -76,16 +76,16 @@ amcl:
 
 amcl_map_client:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
 
 amcl_rclcpp_node:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
 
 # ==================== BT NAVIGATOR ====================
 bt_navigator:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
     global_frame: map
     robot_base_frame: base_footprint
     odom_topic: /odometry/filtered   # odometry hợp nhất bằng EKF dùng cho phản hồi vận tốc
@@ -121,14 +121,14 @@ bt_navigator:
 
 bt_navigator_rclcpp_node:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
 
 # ==================== CONTROLLER SERVER (DWB) ====================
 # Bộ lập lịch cục bộ dựa trên Cửa sổ Động (DWB) — lấy mẫu các cặp (vx, ω),
 # mô phỏng tiến, chấm điểm bằng các hàm critic, xuất cmd_vel tốt nhất.
 controller_server:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
     controller_frequency: 20.0       # [Hz] tần suất xuất cmd_vel
 
     # Ngưỡng vận tốc dưới mức robot được coi là đứng yên.
@@ -218,14 +218,14 @@ controller_server:
 
 controller_server_rclcpp_node:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
 
 # ==================== LOCAL COSTMAP ====================
 # Costmap cửa sổ cuộn căn giữa robot — được DWB dùng để tránh va chạm.
 local_costmap:
   local_costmap:
     ros__parameters:
-      use_sim_time: False
+      use_sim_time: True
       global_frame: odom             # costmap theo dõi robot trong frame odom
       plugin_names: ["obstacle_layer", "inflation_layer"]
       plugin_types: ["nav2_costmap_2d::ObstacleLayer", "nav2_costmap_2d::InflationLayer"]
@@ -279,7 +279,7 @@ local_costmap:
 global_costmap:
   global_costmap:
     ros__parameters:
-      use_sim_time: False
+      use_sim_time: True
       global_frame: map              # neo vào frame bản đồ tĩnh
       footprint: "[[0.32, 0.30], [0.32, -0.30], [-0.12, -0.30], [-0.12, 0.30]]"
       resolution: 0.03               # [m/ô lưới]
@@ -318,22 +318,22 @@ global_costmap:
 
   global_costmap_client:
     ros__parameters:
-      use_sim_time: False
+      use_sim_time: True
   global_costmap_rclcpp_node:
     ros__parameters:
-      use_sim_time: False
+      use_sim_time: True
 
 # ==================== MAP SERVER ====================
 map_server:
   ros__parameters:
-    use_sim_time: False
-    yaml_filename: "/home/nguyenan/mbrobot_ws/src/mobile_robot/maps/lab_demo_map.yaml"
+    use_sim_time: True
+    yaml_filename: ""
 
 # ==================== PLANNER SERVER ====================
 # Bộ lập lịch toàn cục NavFn — tính toán đường đi không va chạm trên costmap toàn cục.
 planner_server:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
     expected_planner_frequency: 5.0  # [Hz] tần suất lập lịch lại mục tiêu
     planner_plugins: ["GridBased"]
     GridBased:
@@ -344,17 +344,16 @@ planner_server:
 
 planner_server_rclcpp_node:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
 
 navfn_planner_GetCostmap_client:
   ros__parameters:
-    use_sim_time: False
-
+    use_sim_time: True
 # ==================== RECOVERIES SERVER ====================
 # Thực thi các hành vi phục hồi khi robot bị kẹt hoặc không thể đến đích.
 recoveries_server:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0            # [Hz] tần suất vòng lặp thực thi phục hồi
@@ -383,7 +382,7 @@ recoveries_server:
 # Điều phối các chuyển trạng thái vòng đời configure → activate → deactivate của các node Nav2.
 lifecycle_manager:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
     autostart: True                  # tự động kích hoạt tất cả node được quản lý khi khởi động
     node_names:
       - map_server
@@ -396,8 +395,8 @@ lifecycle_manager:
 
 lifecycle_manager_service_client:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
 
 lifecycle_manager_client_service_client:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
