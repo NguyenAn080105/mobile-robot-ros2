@@ -1,30 +1,36 @@
 import os
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, TimerAction, ExecuteProcess,  LogInfo
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
 
 def generate_launch_description():
     package_name = 'mobile_robot'
     pkg_share = get_package_share_directory(package_name)
     pkg_nav2_bringup = get_package_share_directory('nav2_bringup')
 
-    default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot_v2.urdf.xacro')
+    # ====================== PATH ======================
+    default_model_path  = os.path.join(pkg_share, 'urdf', 'mobile_robot_v3.urdf.xacro')
     default_world_path  = os.path.join(pkg_share, 'worlds', 'sim_room.world')
-    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'nav_config.rviz')
+    default_rviz_config = os.path.join(pkg_share, 'config', 'rviz', 'nav_fusion_config.rviz')
     nav2_params         = os.path.join(pkg_share, 'config', 'nav2_params_v2.yaml')
     map_file            = os.path.join(pkg_share, 'maps', 'sim_map.yaml')
     checkpoint_file     = os.path.join(pkg_share, 'config', 'checkpoints_v2.yaml')
 
+    # ====================== Launch Config ======================
     use_sim_time = LaunchConfiguration('use_sim_time')
     timeout      = LaunchConfiguration('timeout_at_checkpoint')
 
     # ====================== SIMULATION BRINGUP ======================
+    # sim_nav_v3 phải gọi đúng spawn_sim_robot_v3.launch.py.
+    # RViz KHÔNG chạy trong spawn file, chỉ chạy một lần ở file này.
     spawn_sim_robot = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_share, 'launch', 'spawn_sim_robot_v2.launch.py')
+            os.path.join(pkg_share, 'launch', 'spawn_sim_robot_v3.launch.py')
         ),
         launch_arguments={
             'use_sim_time': use_sim_time,
@@ -46,14 +52,15 @@ def generate_launch_description():
     )
 
     # ====================== RVIZ ======================
+    # MỚI — softpipe + GLSL 4.5 bypass hoàn toàn sampler conflict
     rviz2 = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        parameters=[{'use_sim_time': use_sim_time}],
-        arguments=['-d', default_rviz_config]
-    )
+    package='rviz2',
+    executable='rviz2',
+    name='rviz2',
+    output='screen',
+    parameters=[{'use_sim_time': use_sim_time}],
+    arguments=['-d', default_rviz_config]   # không có additional_env
+)
 
     # ====================== CHECKPOINT NAVIGATOR ======================
     navigator_node = Node(
@@ -72,14 +79,16 @@ def generate_launch_description():
 
     # ====================== TIMING ======================
     delayed_nav2      = TimerAction(period=3.0,  actions=[nav2])
-    delayed_rviz2     = TimerAction(period=5.0, actions=[rviz2])
-    delayed_navigator = TimerAction(period=7.0, actions=[navigator_node])
+
+    # Cho map_server, AMCL, TF và Nav2 lifecycle ổn định trước khi RViz subscribe/render.
+    delayed_rviz2     = TimerAction(period=10.0, actions=[rviz2])
+    delayed_navigator = TimerAction(period=12.0, actions=[navigator_node])
 
     return LaunchDescription([
-        DeclareLaunchArgument('use_sim_time',           default_value='true'),
-        DeclareLaunchArgument('model',                  default_value=default_model_path),
-        DeclareLaunchArgument('world',                  default_value=default_world_path),
-        DeclareLaunchArgument('timeout_at_checkpoint',  default_value='30.0'),
+        DeclareLaunchArgument('use_sim_time',          default_value='true'),
+        DeclareLaunchArgument('model',                 default_value=default_model_path),
+        DeclareLaunchArgument('world',                 default_value=default_world_path),
+        DeclareLaunchArgument('timeout_at_checkpoint', default_value='30.0'),
 
         spawn_sim_robot,
         delayed_nav2,
