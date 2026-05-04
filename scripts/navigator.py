@@ -13,6 +13,12 @@ Luồng chính:
   IDLE ──go──► COMPUTING_PATH ──► PRE_ROTATING ──► NAVIGATING
                                                         │
                                             succeeded ──┘─► IDLE
+                                                              │ (nếu CP ≠ Home)
+                                                              ▼
+                                                     [15s AT_CHECKPOINT wait]
+                                                              │
+                                                   go ────────┤─► COMPUTING_PATH
+                                                   15s timeout──► RETURNING_HOME
                                             stop     ──────► STOPPED
                                                                │
                                                     continue ──┤─► COMPUTING_PATH
@@ -25,6 +31,8 @@ Thay đổi so với v2:
   - EMERGENCY_STOP → STOPPED (có thể resume)
   - AT_CHECKPOINT bị xóa → sau khi đến CP thì về IDLE ngay
   - Thêm WAITING_RESET (30s chờ sau reset)
+  - Thêm at_checkpoint timer 15s: sau khi đến CP (≠ Home) thành công,
+    chờ 15s. Nếu nhận go:<id> → hủy timer; nếu hết 15s → tự về Home.
   - Dùng 1 topic /robot/command (String) thay vì nhiều topic
   - _stop_requested flag: chặn _send_nav_goal khi stop xảy ra trong COMPUTING_PATH
   - _intentional_cancel flag: phân biệt cancel chủ ý vs Nav2-triggered
@@ -68,8 +76,8 @@ PRE_ROTATE_THRESHOLD = 0.40     # rad (~23°) — ngưỡng kích hoạt pre-rot
 PRE_ROTATE_STOP_THR  = 0.05     # rad (~3°)  — ngưỡng coi là đã căn xong
 PRE_ROTATE_LOOKAHEAD = 0.50     # m   — lookahead trên path để tính heading ban đầu
 PRE_ROTATE_KP        = 1.5      # P-gain bộ điều khiển xoay tại chỗ
-PRE_ROTATE_MAX_W     = 0.80     # rad/s — tốc độ góc tối đa
-PRE_ROTATE_MIN_W     = 0.15     # rad/s — tốc độ góc tối thiểu (thắng ma sát tĩnh)
+PRE_ROTATE_MAX_W     = 1.5      # rad/s — tốc độ góc tối đa
+PRE_ROTATE_MIN_W     = 0.4      # rad/s — tốc độ góc tối thiểu (thắng ma sát tĩnh)
 PRE_ROTATE_TIMEOUT   = 12.0     # s  — timeout pre-rotate
 
 # Home retry khi RETURNING_HOME bị abort
@@ -81,6 +89,10 @@ NAV2_SERVER_TIMEOUT_S = 30.0    # s
 
 # Thời gian chờ ở WAITING_RESET trước khi tự về Home
 RESET_WAIT_TIMEOUT_S  = 30      # s (int — đếm bằng 1s tick)
+
+# Thời gian chờ tại checkpoint trước khi tự về Home
+# Robot ở trạng thái IDLE trong suốt khoảng chờ này → lệnh go:<id> vẫn hợp lệ.
+AT_CHECKPOINT_WAIT_S  = 15      # s (int — đếm bằng 1s tick)
 
 # ============================================================
 
@@ -113,6 +125,8 @@ _STOP_VALID_STATES = {State.COMPUTING_PATH, State.PRE_ROTATING, State.NAVIGATING
 class CheckpointNavigator(Node):
     """
     Navigator v2: 4-command state machine với debug log đầy đủ.
+    Thêm tính năng: sau khi đến checkpoint (≠ Home) thành công,
+    chờ AT_CHECKPOINT_WAIT_S giây rồi tự về Home nếu không nhận lệnh go.
     """
 
     def __init__(self):
@@ -141,17 +155,23 @@ class CheckpointNavigator(Node):
         self._pending_cp_id    = None
 
         # Stop/continue/reset flags
-        self._stop_requested   = False  # Chặn _send_nav_goal khi stop trong COMPUTING_PATH
+        self._stop_requested    = False  # Chặn _send_nav_goal khi stop trong COMPUTING_PATH
         self._intentional_cancel = False # Phân biệt cancel chủ ý vs Nav2-triggered
-        self._saved_target_cp  = None   # CP được lưu khi stop, dùng cho continue
+        self._saved_target_cp   = None   # CP được lưu khi stop, dùng cho continue
 
         # Returning home
         self._is_returning_home = False
         self._home_retry_count  = 0
 
         # WAITING_RESET timer state
-        self._reset_elapsed    = 0
-        self._reset_timer      = None   # timer handle
+        self._reset_elapsed = 0
+        self._reset_timer   = None   # timer handle
+
+        # ── AT_CHECKPOINT wait-then-return-home timer ────────────────────────
+        # Được kích hoạt sau khi đến CP ≠ Home thành công.
+        # Robot ở State.IDLE trong suốt thời gian chờ.
+        self._at_cp_elapsed = 0
+        self._at_cp_timer   = None   # timer handle
 
         # ── TF ──────────────────────────────────────────────────────────────
         self._tf_buffer   = tf2_ros.Buffer()
@@ -195,7 +215,8 @@ class CheckpointNavigator(Node):
             f"{len(self.checkpoints)} checkpoints │ "
             f"home_id={self.home_id} │ "
             f"pre_rotate_thr={math.degrees(PRE_ROTATE_THRESHOLD):.0f}° │ "
-            f"reset_wait={RESET_WAIT_TIMEOUT_S}s"
+            f"reset_wait={RESET_WAIT_TIMEOUT_S}s │ "
+            f"at_checkpoint_wait={AT_CHECKPOINT_WAIT_S}s"
         )
 
     # ════════════════════════════════════════════════════════
@@ -272,7 +293,7 @@ class CheckpointNavigator(Node):
     def _cmd_go(self, raw: str):
         """
         go:<id> — Điều hướng đến checkpoint id.
-        Hợp lệ trong: IDLE, WAITING_RESET
+        Hợp lệ trong: IDLE (kể cả đang chờ at_checkpoint timer), WAITING_RESET
         """
         # Parse ID
         try:
@@ -309,13 +330,18 @@ class CheckpointNavigator(Node):
                 f"[GO] Rejected: not valid in state {self.state.name}.")
             return
 
+        # ── Hủy at_checkpoint timer nếu đang đếm ngược ──────────────────────
+        # Điều này xảy ra khi người dùng gửi go:<id> trong 15s chờ sau khi
+        # robot đến CP thành công (robot đang ở IDLE + _at_cp_timer đang chạy).
+        self._cancel_at_cp_timer()
+
         # WAITING_RESET → hủy timer 30s trước khi thực thi
         if self.state == State.WAITING_RESET:
             self._cancel_reset_timer()
             self.get_logger().info(
                 f"[GO] Received during WAITING_RESET → canceling reset timer.")
 
-        # Nếu đã ở đúng CP và đang IDLE
+        # Nếu đã ở đúng CP và đang IDLE (và không có at_cp_timer nào chạy)
         if self.state == State.IDLE and self.current_cp == cp_id:
             self.get_logger().info(
                 f"[GO] Already at checkpoint [{cp_id}] "
@@ -417,9 +443,9 @@ class CheckpointNavigator(Node):
             "(full re-compute including pre-rotate)")
 
         # Reset flags
-        self._stop_requested    = False
+        self._stop_requested     = False
         self._intentional_cancel = False
-        self._saved_target_cp   = None
+        self._saved_target_cp    = None
 
         self._pub_status(
             f"Continuing to [{cp_id}] '{saved_name}'...")
@@ -447,8 +473,8 @@ class CheckpointNavigator(Node):
             "unless 'go:<id>' is received.")
 
         # Xóa saved target
-        self._saved_target_cp   = None
-        self._stop_requested    = False
+        self._saved_target_cp    = None
+        self._stop_requested     = False
         self._intentional_cancel = False
 
         self.state = State.WAITING_RESET
@@ -478,8 +504,8 @@ class CheckpointNavigator(Node):
         self._reset_elapsed += 1
         remaining = RESET_WAIT_TIMEOUT_S - self._reset_elapsed
 
-        # Log mỗi 10s để không spam terminal
-        if remaining % 10 == 0 or remaining <= 5:
+        # Log mỗi 15s để không spam terminal
+        if remaining % 15 == 0 or remaining <= 5:
             self.get_logger().info(
                 f"[RESET_TIMER] {remaining}s remaining before going home [{self.home_id}].")
 
@@ -501,6 +527,72 @@ class CheckpointNavigator(Node):
             self._reset_timer = None
             self.get_logger().info(
                 "[RESET_TIMER] Canceled (new go command received).")
+
+    # ════════════════════════════════════════════════════════
+    #  AT_CHECKPOINT wait-then-return-home timer
+    # ════════════════════════════════════════════════════════
+
+    def _start_at_cp_timer(self, cp_id: int):
+        """
+        Khởi động bộ đếm ngược AT_CHECKPOINT_WAIT_S giây.
+        Được gọi sau khi đến CP ≠ Home thành công.
+        Robot ở State.IDLE trong suốt khoảng chờ.
+        """
+        self._at_cp_elapsed = 0
+        self._at_cp_timer   = self.create_timer(1.0, self._at_cp_tick)
+        cp_name = self.checkpoints.get(cp_id, {}).get("name", str(cp_id))
+        self.get_logger().info(
+            f"[AT_CP_TIMER] Started at [{cp_id}] '{cp_name}'. "
+            f"Will return home [{self.home_id}] in {AT_CHECKPOINT_WAIT_S}s "
+            "unless 'go:<id>' is received.")
+        self._pub_status(
+            f"At [{cp_id}] '{cp_name}'. "
+            f"Send 'go:<id>' within {AT_CHECKPOINT_WAIT_S}s or robot returns home.")
+
+    def _at_cp_tick(self):
+        """
+        Tick 1s — đếm ngược AT_CHECKPOINT_WAIT_S.
+        Khi hết giờ → set _is_returning_home và navigate về Home.
+        Nếu state không còn là IDLE (robot bị điều khiển đi nơi khác) → hủy.
+        """
+        # Guard: nếu robot rời khỏi IDLE (ví dụ đã nhận go và đang navigate),
+        # timer tự hủy để không gây xung đột.
+        if self.state != State.IDLE:
+            self._at_cp_timer.cancel()
+            self._at_cp_timer = None
+            self.get_logger().info(
+                "[AT_CP_TIMER] Canceled (robot left IDLE state).")
+            return
+
+        self._at_cp_elapsed += 1
+        remaining = AT_CHECKPOINT_WAIT_S - self._at_cp_elapsed
+
+        # Log mỗi 15s và 3s cuối để không spam terminal
+        if remaining % 15 == 0 or remaining <= 3:
+            self.get_logger().info(
+                f"[AT_CP_TIMER] {remaining}s remaining before returning home [{self.home_id}].")
+
+        if self._at_cp_elapsed >= AT_CHECKPOINT_WAIT_S:
+            self._at_cp_timer.cancel()
+            self._at_cp_timer = None
+            self.get_logger().info(
+                f"[AT_CP_TIMER] Timeout! Returning home [{self.home_id}].")
+            self._pub_status(
+                f"Checkpoint wait timeout. Returning home [{self.home_id}]...")
+            self._is_returning_home = True
+            self._home_retry_count  = 0
+            self._request_navigation(self.home_id)
+
+    def _cancel_at_cp_timer(self):
+        """
+        Hủy at_checkpoint timer nếu đang chạy.
+        Được gọi từ _cmd_go() khi người dùng gửi go:<id> trong 15s chờ.
+        """
+        if self._at_cp_timer is not None:
+            self._at_cp_timer.cancel()
+            self._at_cp_timer = None
+            self.get_logger().info(
+                "[AT_CP_TIMER] Canceled (new go command received).")
 
     # ════════════════════════════════════════════════════════
     #  STATE MACHINE TICK (10 Hz)
@@ -752,6 +844,8 @@ class CheckpointNavigator(Node):
             self._home_retry_count = 0
 
             if self._is_returning_home:
+                # ── Đến Home sau khi tự về (RETURNING_HOME) ─────────────
+                # Không tạo at_checkpoint timer — robot nghỉ tại Home.
                 self._is_returning_home = False
                 self.state = State.IDLE
                 self.get_logger().info(
@@ -759,14 +853,30 @@ class CheckpointNavigator(Node):
                     "State: IDLE.")
                 self._pub_status(
                     f"At Home [{cp_id}] '{cp_name}'. IDLE.")
+
+            elif cp_id == self.home_id:
+                # ── Đến Home theo lệnh go thủ công ───────────────────────
+                # Người dùng chủ động điều hướng về Home → không tạo timer,
+                # robot nghỉ tại Home chờ lệnh tiếp theo.
+                self.state = State.IDLE
+                self.get_logger().info(
+                    f"[RESULT] ✓ Arrived at HOME [{cp_id}] '{cp_name}' "
+                    "(manual go). State: IDLE.")
+                self._pub_status(
+                    f"Arrived at Home [{cp_id}] '{cp_name}'. "
+                    "Send 'go:<id>' for next destination.")
+
             else:
+                # ── Đến checkpoint thông thường (≠ Home) ─────────────────
+                # Chuyển IDLE ngay, đồng thời khởi động at_checkpoint timer.
+                # Trong AT_CHECKPOINT_WAIT_S giây:
+                #   • Nếu nhận go:<id> → _cancel_at_cp_timer() rồi navigate.
+                #   • Nếu hết giờ    → _at_cp_tick() tự navigate về Home.
                 self.state = State.IDLE
                 self.get_logger().info(
                     f"[RESULT] ✓ Arrived at [{cp_id}] '{cp_name}'. "
-                    "State: IDLE.")
-                self._pub_status(
-                    f"Arrived at [{cp_id}] '{cp_name}'. "
-                    "Send 'go:<id>' for next destination.")
+                    f"State: IDLE. Starting {AT_CHECKPOINT_WAIT_S}s wait timer.")
+                self._start_at_cp_timer(cp_id)
 
         # ── CANCELED ─────────────────────────────────────────────────────
         elif status == GoalStatus.STATUS_CANCELED:
