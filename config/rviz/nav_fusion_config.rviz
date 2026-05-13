@@ -1,13 +1,12 @@
 Panels:
   - Class: rviz_common/Displays
-    Help Height: 70
+    Help Height: 138
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Global Options1
         - /Map1/Topic1
       Splitter Ratio: 0.5
-    Tree Height: 795
+    Tree Height: 1080
   - Class: rviz_common/Views
     Expanded:
       - /Current View1
@@ -120,6 +119,11 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
+        us_top_left_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
         us_top_right_link:
           Alpha: 1
           Show Axes: false
@@ -167,6 +171,8 @@ Visualization Manager:
           Value: true
         us_mid_2_right_link:
           Value: true
+        us_top_left_link:
+          Value: true
         us_top_right_link:
           Value: true
       Marker Scale: 1
@@ -198,6 +204,8 @@ Visualization Manager:
                     {}
                   us_mid_2_right_link:
                     {}
+                  us_top_left_link:
+                    {}
                   us_top_right_link:
                     {}
                 left_wheel:
@@ -221,9 +229,9 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 30
+      Max Intensity: 0
       Min Color: 0; 0; 0
-      Min Intensity: 1
+      Min Intensity: 0
       Name: LaserScan
       Position Transformer: XYZ
       Selectable: true
@@ -278,6 +286,33 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /local_costmap/costmap_updates
       Use Timestamp: false
+      Value: false
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 252; 233; 79
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Billboards
+      Line Width: 0.03999999910593033
+      Name: Path_Local
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /local_plan
       Value: true
     - Alpha: 0.699999988079071
       Class: rviz_default_plugins/Map
@@ -307,9 +342,9 @@ Visualization Manager:
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Lines
-      Line Width: 0.029999999329447746
-      Name: Path
+      Line Style: Billboards
+      Line Width: 0.03999999910593033
+      Name: Path_Global
       Offset:
         X: 0
         Y: 0
@@ -453,6 +488,14 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: goal_pose
+    - Class: rviz_default_plugins/PublishPoint
+      Single click: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /clicked_point
   Transformation:
     Current:
       Class: rviz_default_plugins/TF
@@ -460,25 +503,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 6.358397483825684
+      Distance: 5.8157243728637695
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -5.670314788818359
-        Y: -7.325878620147705
-        Z: -2.6829161643981934
+        X: 0.28344249725341797
+        Y: -0.22394371032714844
+        Z: 0.44095516204833984
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.8952035903930664
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 5.916309356689453
+      Yaw: 0.11235713213682175
     Saved:
       - Class: rviz_default_plugins/Orbit
         Distance: 1.7000000476837158
@@ -543,12 +586,12 @@ Visualization Manager:
 Window Geometry:
   Displays:
     collapsed: false
-  Height: 1016
+  Height: 1484
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd0000000100000000000001820000039efc0200000001fc0000003d0000039e000000c900fffffffa000000010100000002fb0000000a005600690065007700730000000000ffffffff0000010000fffffffb000000100044006900730070006c0061007900730100000000000001560000015600ffffff000005b00000039e00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd0000000100000000000001f700000530fc0200000001fc0000006e000005300000018200fffffffa000000010100000002fb0000000a005600690065007700730000000000ffffffff0000015f00fffffffb000000100044006900730070006c006100790073010000000000000156000001f700ffffff000006690000053000000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Views:
     collapsed: false
-  Width: 1848
-  X: 72
-  Y: 27
+  Width: 2156
+  X: 120
+  Y: 54
