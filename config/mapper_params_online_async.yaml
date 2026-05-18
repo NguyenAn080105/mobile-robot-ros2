@@ -20,11 +20,11 @@ slam_toolbox:
     scan_topic: /scan_filtered # Topic lấy dữ liệu LiDAR (khuyến cáo dùng pointcloud đã qua bộ lọc filter nhiễu chân robot hoặc nhiễu chói).
     mode: mapping              # Chế độ chạy: 'mapping' (tạo bản đồ mới) hoặc 'localization' (chỉ định vị trên bản đồ đã có).
 
-    map_update_interval: 4.0          # (Giây) Tần suất cập nhật lưới bản đồ (Occupancy Grid) lên topic /map. Cập nhật mỗi 4 giây giúp RViz trên Laptop hiển thị mượt mà.
+    map_update_interval: 6.0          # (Giây) Tần suất cập nhật lưới bản đồ (Occupancy Grid) lên topic /map. Cập nhật mỗi 6 giây giúp RViz trên Laptop hiển thị mượt mà.
 
     # Các điều kiện "kích hoạt" (trigger) xử lý thêm 1 node scan mới vào bản đồ:
     minimum_travel_distance: 0.2      # (Mét) Xử lý scan mới khi robot đi được thêm 0.2m. Rất nhạy để bắt kịp chuyển động.
-    minimum_time_interval: 0.2        # (Giây) Mốc thời gian tối thiểu để xử lý một scan.
+    minimum_time_interval: 0.5        # (Giây) Mốc thời gian tối thiểu để xử lý một scan.
     minimum_travel_heading: 0.5       # (Radian) Xử lý scan mới khi xoay được ~30 độ. Ở chế độ diff-drive (quay tại chỗ), tham số này rất quan trọng để không bỏ lỡ góc cua.
     
     throttle_scans: 1                 # Số scan bị bỏ qua. Bằng 1 nghĩa là xử lý 100% scan. (Xavier rất mạnh nên không cần drop/skip scan).
@@ -34,8 +34,8 @@ slam_toolbox:
     # ================================================================
     # CHẤT LƯỢNG MAP
     # ================================================================
-    resolution: 0.03                  # (Mét/pixel) Kích thước 1 ô cell bản đồ = 3cm. Chi tiết hơn so với mặc định (5cm), cho phép Navigation tránh các chướng ngại vật nhỏ hiệu quả. Bộ nhớ Jetson 16GB hoàn toàn đáp ứng được.
-    max_laser_range: 20.0             # (Mét) Tầm quét tối đa của LiDAR S2E. Hợp lý cho không gian trong nhà rộng.
+    resolution: 0.05                  # (Mét/pixel) Kích thước 1 ô cell bản đồ = 3cm. Chi tiết hơn so với mặc định (5cm), cho phép Navigation tránh các chướng ngại vật nhỏ hiệu quả. Bộ nhớ Jetson 16GB hoàn toàn đáp ứng được.
+    max_laser_range: 10.0             # (Mét) Tầm quét tối đa của LiDAR S2E. Hợp lý cho không gian trong nhà rộng.
 
     # ================================================================
     # SCAN MATCHING — (So khớp dữ liệu LiDAR hiện tại với bản đồ)
@@ -69,7 +69,7 @@ slam_toolbox:
     # Tương tự như trên nhưng dành cho Loop Closure (Không gian rộng và thô hơn)
     loop_search_space_dimension: 8.0                # (Mét) Tìm kiếm đóng vòng trong ô rộng tới 8m.
     loop_search_space_resolution: 0.05              # (Mét) Độ phân giải đóng vòng 5cm (đủ để nhận diện sơ bộ trước khi tối ưu).
-    loop_search_space_smear_deviation: 0.03
+    loop_search_space_smear_deviation: 0.03         # Độ làm mượt không gian tìm kiếm vòng lặp, giúp tăng khả năng phát hiện vòng lặp ngay cả khi có nhiễu hoặc sai số lớn.
 
     # ================================================================
     # SCAN MATCHER PENALTIES (Trọng số Phạt - Đánh giá độ tin cậy)
